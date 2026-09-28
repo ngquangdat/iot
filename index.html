@@ -317,7 +317,30 @@ progress[hidden] { display: none; }
         <span class="value">km/h</span>
       </div>
     </div>
-    <p id="keyFoot" class="foot">Google cần key có bật Routes API. OpenStreetMap miễn phí, không cần key. Chế độ thử chạy giả lập dọc tuyến đường.</p>
+    <p id="keyFootTop" class="foot">Google cần key có bật Routes API. OpenStreetMap miễn phí, không cần key. Chế độ thử chạy giả lập dọc tuyến đường.</p>
+
+    <div class="group-title">Khi sắp đến chỗ rẽ</div>
+    <div class="group">
+      <div class="row">
+        <span class="grow">Bắt đầu từ</span>
+        <select id="apFrom" style="width:auto">
+          <option value="300">300 m</option>
+          <option value="500">500 m</option>
+          <option value="1000">1 km</option>
+        </select>
+      </div>
+      <div class="row">
+        <span class="grow">Cập nhật mỗi</span>
+        <select id="apEvery" style="width:auto">
+          <option value="1500">Liên tục (~1,5 giây)</option>
+          <option value="2000">2 giây</option>
+          <option value="3000">3 giây</option>
+          <option value="5000">5 giây</option>
+        </select>
+      </div>
+    </div>
+    <p class="foot">Trong vùng này nhãn cập nhật khoảng cách liên tục (làm tròn 10 m, dưới 100 m là 5 m). Ngoài vùng: 8–20 giây một lần.</p>
+
 
     <div id="fwSection" hidden>
       <div class="group-title">Màn hình</div>
@@ -995,10 +1018,13 @@ const NAV_ICON_IDS = {
   straight: 0, left: 1, right: 2, 'slight-left': 3, 'slight-right': 4, 'sharp-left': 5, 'sharp-right': 6,
   'keep-left': 7, 'keep-right': 8, 'uturn-left': 9, 'uturn-right': 10, roundabout: 11, merge: 12, arrive: 13,
 };
-// Distance as the tag shows it: coarse far away, fine close to the maneuver.
-function navDistStep(d) { return d >= 1000 ? 100 : d >= 300 ? 50 : d >= 100 ? 10 : 5; }
-// Minimum time between screen updates: the closer the maneuver, the more often (fast refresh ≈ 1.5 s).
-function navGapMs(d) { return d <= 100 ? 1500 : d <= 300 ? 3000 : d <= 1000 ? 8000 : 20000; }
+// Approach zone (Settings): within apFrom metres of a maneuver the tag is updated
+// continuously, every apEvery ms at most (the fast refresh itself takes ≈ 1.5 s).
+const approach = () => ({ from: Number($('apFrom').value) || 500, every: Number($('apEvery').value) || 1500 });
+// Distance as the tag shows it: coarse far away, fine inside the approach zone.
+function navDistStep(d) { return d >= 1000 && d > approach().from ? 100 : d > approach().from ? 50 : d >= 100 ? 10 : 5; }
+// Minimum time between screen updates.
+function navGapMs(d) { return d <= approach().from ? approach().every : d <= 1000 ? 8000 : 20000; }
 
 /* NAV packet: 40 flags icon dist(u16) remain/10(u16) eta_h eta_m text */
 function navPacket(info, flags = 0) {
@@ -1010,7 +1036,7 @@ function navPacket(info, flags = 0) {
   while (n > 0 && n < bytes.length && (bytes[n] & 0xc0) === 0x80) n--;
   const pkt = new Uint8Array(9 + n);
   if (info.arrived) flags |= 0x02;
-  else if (info.dist <= 400) flags |= 0x04;  // maneuver close: tag postpones its 13 s full refresh
+  else if (info.dist <= Math.max(300, approach().from)) flags |= 0x04;  // approach zone: tag postpones its 13 s full refresh
   pkt.set([CMD.NAV, flags, NAV_ICON_IDS[info.code] ?? 0, dist & 0xff, dist >> 8,
     remain & 0xff, remain >> 8, info.eta.getHours(), info.eta.getMinutes()]);
   pkt.set(bytes.subarray(0, n), 9);
@@ -1029,6 +1055,11 @@ async function maybeSend(force) {
     key = info.arrived ? 'arrived' : `${info.idx}|${shown}|${info.dist <= 50}`;
     const stepChanged = !info.arrived && nav.lastKey && nav.lastKey.split('|')[0] !== String(info.idx);
     if (stepChanged && info.dist > 800) flags = 0x08;  // long straight ahead: clear ghosting now
+    // Just before the approach zone: clear ghosting once so the continuous updates start clean.
+    if (!info.arrived && nav.cleanIdx !== info.idx && info.dist > approach().from && info.dist <= approach().from + 300) {
+      flags = 0x08;
+      nav.cleanIdx = info.idx;
+    }
     gap = stepChanged ? 0 : navGapMs(info.dist);
   } else {
     key = info.arrived ? 'arrived' : `${info.idx}|${IMAGE_BUCKETS.findIndex(t => info.dist > t)}`;
@@ -1071,7 +1102,7 @@ async function reroute(from) {
   }
 }
 
-function onPosition(p, acc) {
+function onPosition(p, acc, speed) {
   if (!nav.running || !nav.route || nav.rerouting) return;
   const loc = locate(nav.route, p);
   if (loc.off > Math.max(40, (acc || 0) * 1.5)) {
@@ -1080,8 +1111,14 @@ function onPosition(p, acc) {
   }
   nav.offCount = 0;
   nav.lastIdx = loc.idx;
+  const now = Date.now();
+  const prevAlong = nav.lastAlong, prevAt = nav.lastFixAt;
   // Ignore small GPS jitter backwards along the route.
   nav.lastAlong = loc.along < nav.lastAlong && nav.lastAlong - loc.along < 30 ? nav.lastAlong : loc.along;
+  nav.lastFixAt = now;
+  // Speed for predicting between fixes: GPS speed if given, else from progress along the route.
+  if (speed != null && speed >= 0) nav.speed = speed;
+  else if (prevAt && now > prevAt) nav.speed = Math.max(0, (nav.lastAlong - prevAlong) / ((now - prevAt) / 1000));
   const info = computeInfo(nav.lastAlong);
   showInfo(info);
   maybeSend(false);
@@ -1129,7 +1166,7 @@ async function startNav() {
     $('btnNav').disabled = false;
     return;
   }
-  Object.assign(nav, { running: true, lastAlong: 0, lastIdx: 0, offCount: 0, lastKey: null, lastSentAt: 0, arrived: false, simAlong: 0 });
+  Object.assign(nav, { running: true, lastAlong: 0, lastIdx: 0, offCount: 0, lastKey: null, lastSentAt: 0, arrived: false, simAlong: 0, cleanIdx: null, speed: 0, lastFixAt: 0 });
   log(`Tuyến đường: ${fmtDist(nav.route.total)}, ${nav.route.steps.length} bước, ~${Math.round(nav.route.duration / 60)} phút`);
   foot('navFoot', state.ch ? '' : 'Chưa kết nối nhãn — chỉ xem trước trên điện thoại.');
   $('btnNav').disabled = false;
@@ -1140,16 +1177,24 @@ async function startNav() {
   if ($('simOn').checked) {
     nav.simTimer = setInterval(() => {
       nav.simAlong += (Number($('simSpeed').value) || 40) / 3.6;
-      onPosition(pointAt(nav.route, Math.min(nav.simAlong, nav.route.total)), 5);
+      onPosition(pointAt(nav.route, Math.min(nav.simAlong, nav.route.total)), 5, (Number($('simSpeed').value) || 40) / 3.6);
     }, 1000);
   } else {
     nav.watchId = navigator.geolocation.watchPosition(
-      pos => onPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }, pos.coords.accuracy),
+      pos => onPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }, pos.coords.accuracy, pos.coords.speed),
       err => foot('navFoot', 'Vị trí: ' + err.message, true),
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
   }
-  // Retry pending sends even when position updates stall.
-  nav.sendTimer = setInterval(() => maybeSend(false), 1000);
+  // Between GPS fixes (≈1 s apart) predict the position from the current speed, so the
+  // approach-zone countdown can run at the tag's own pace (~1.5 s) instead of the GPS rate.
+  nav.sendTimer = setInterval(() => {
+    if (nav.running && nav.route && !nav.rerouting && nav.speed > 0.5 && nav.lastFixAt && !nav.arrived) {
+      const dt = Math.min(2, (Date.now() - nav.lastFixAt) / 1000);
+      const info = computeInfo(Math.min(nav.route.total - 26, nav.lastAlong + nav.speed * dt));
+      if (!info.arrived) showInfo(info);
+    }
+    maybeSend(false);
+  }, 250);
 }
 
 function stopNav(arrived) {
@@ -1339,13 +1384,17 @@ function init() {
     store.set('gkey', $('gKey').value.trim());
     $('gKey').value = '';
     keyState();
-    foot('keyFoot', store.get('gkey', '') ? 'Đã lưu key trong trình duyệt này.' : 'Đã xóa key.');
+    foot('keyFootTop', store.get('gkey', '') ? 'Đã lưu key trong trình duyệt này.' : 'Đã xóa key.');
   };
   $('simOn').checked = store.get('simOn', false);
   $('simSpeed').value = store.get('simSpeed', 40);
   $('simSpeedRow').hidden = !$('simOn').checked;
   $('simOn').onchange = () => { store.set('simOn', $('simOn').checked); $('simSpeedRow').hidden = !$('simOn').checked; };
   $('simSpeed').onchange = () => store.set('simSpeed', Number($('simSpeed').value) || 40);
+  $('apFrom').value = store.get('apFrom', 500);
+  $('apEvery').value = store.get('apEvery', 1500);
+  $('apFrom').onchange = () => store.set('apFrom', Number($('apFrom').value));
+  $('apEvery').onchange = () => store.set('apEvery', Number($('apEvery').value));
 
   // Settings: tag refresh (firmware with nav=1)
   $('fwFast').onchange = () => fwSend([CMD.NAV_CTRL, 0x01, $('fwFast').checked ? 1 : 0]);

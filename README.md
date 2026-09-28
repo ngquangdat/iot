@@ -5,7 +5,8 @@ Một file `index.html`, không cần server. Mở tại **https://ngquangdat.gi
 
 ## Chức năng
 - **Chỉ đường** – nhập điểm đến, chọn phương tiện, bấm *Bắt đầu*. Tuyến lấy từ Google Maps (Routes API, key của bạn)
-  hoặc OpenStreetMap (miễn phí). Web bám GPS, tự tính lại khi đi lệch và cập nhật nhãn dày dần khi đến gần chỗ rẽ.
+  hoặc OpenStreetMap (miễn phí). Web bám GPS, tự tính lại khi đi lệch. Trong vùng sắp rẽ (mặc định 500 m, chỉnh trong
+  Cài đặt) nhãn đếm ngược liên tục ~1,5 giây/lần — web ước lượng vị trí giữa các lần GPS theo tốc độ đang đi.
 - **Màn hình** – chuyển nhãn sang *Đồng hồ* hoặc *Lịch*, hoặc gửi một ảnh (tự cắt vừa khung, chuyển sang 3 màu).
 - **Cài đặt** – nguồn bản đồ và API key, chế độ thử (giả lập di chuyển), tuỳ chỉnh cập nhật nhanh của nhãn,
   liên kết tải firmware, nhật ký.
