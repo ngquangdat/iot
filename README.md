@@ -10,6 +10,16 @@ Web điều khiển nhãn điện tử **AESL0213C** (Nordic nRF52811, e-paper 2
   dithering (Floyd–Steinberg, Atkinson, Bayer, ngưỡng), bảng màu BWR hoặc BW
 - **Mẫu nhãn giá** (tên, giá, đơn vị, giá cũ gạch ngang, dòng phụ) và lớp chữ kéo thả được
 - Kiểm tra/gửi mã kích hoạt, gửi lệnh hex thô, nhật ký
+- **Chỉ đường** (tab "Chỉ đường"): lấy tuyến từ Google Routes API (API key của bạn, lưu trong trình duyệt)
+  hoặc OpenStreetMap (miễn phí), bám GPS, tự tính lại tuyến khi đi lệch, hiển thị mũi tên + khoảng cách +
+  tên đường lên nhãn. Có chế độ mô phỏng để thử tại chỗ.
+
+## Chỉ đường trên iPhone
+Safari không hỗ trợ Web Bluetooth, hãy mở trang bằng ứng dụng **Bluefy** và cho phép quyền vị trí. Trang phải
+luôn mở ở màn hình chính (iOS tạm dừng web khi chạy nền). Với firmware hiện tại mỗi lần cập nhật nhãn là một lần
+refresh 3 màu (~15–20 s), nên web chỉ gửi khi sang hướng rẽ mới hoặc khi vượt các mốc khoảng cách.
+
+Google API key: bật **Routes API**, giới hạn key theo website `https://ngquangdat.github.io/*` và theo API.
 
 ## Chạy
 Web Bluetooth cần HTTPS (hoặc `localhost`) và Chrome/Edge (desktop, Android). Trên iOS dùng Bluefy.
