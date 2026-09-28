@@ -363,6 +363,45 @@ static void fmt_hm(char* p, uint8_t h, uint8_t m) {
 
 static void clear(void) { memset(fb, 0xFF, sizeof(fb)); }
 
+#define SKETCH_X 108
+#define SKETCH_Y 4
+#define SKETCH_W 138
+#define SKETCH_H 96
+
+// Junction sketch: side roads thin, the route thick with an arrow head, and a dot for
+// the rider sliding up the incoming road as the distance counts down.
+static void draw_sketch(const nav_data_t* nav) {
+    const uint8_t* s = nav->shape;
+    int len = nav->shape_len;
+    if (len < 4) return;
+    int jx = s[0], jy = s[1], mpp10 = s[2] ? s[2] : 10, nlines = s[3], i = 4;
+    pt_t pts[32];
+    for (int l = 0; l < nlines && i + 2 <= len; l++) {
+        int w = s[i], n = s[i + 1];
+        i += 2;
+        if (n > 32 || i + 2 * n > len) return;
+        for (int k = 0; k < n; k++) {
+            int x = s[i + 2 * k], y = s[i + 2 * k + 1];
+            pts[k] = (pt_t){SKETCH_X + (x < SKETCH_W ? x : SKETCH_W - 1), SKETCH_Y + (y < SKETCH_H ? y : SKETCH_H - 1)};
+        }
+        i += 2 * n;
+        if (n < 2) continue;
+        if (l == nlines - 1) {
+            arrow(pts, n, w, w * 6);
+        } else {
+            for (int k = 0; k + 1 < n; k++) thick_line(pts[k], pts[k + 1], w);
+        }
+    }
+    uint32_t dy = (uint32_t)nav->dist_m * 10 / mpp10;
+    if (jy + dy + 6 <= SKETCH_H) {
+        int cx = SKETCH_X + jx, cy = SKETCH_Y + jy + dy;
+        fill_circle(cx, cy, 7);
+        m_ink_white = true;
+        fill_circle(cx, cy, 4);
+        m_ink_white = false;
+    }
+}
+
 void gui_draw_nav(const nav_data_t* nav) {
     char buf[40];
     clear();
@@ -402,7 +441,10 @@ void gui_draw_nav(const nav_data_t* nav) {
     m_ink_white = false;
 
     fill_rect(102, 4, 2, 116);
-    draw_wrapped(&font_text, 110, 17, 19, 136, 4, nav->text, nav->text_len);
+    if ((nav->flags & NAV_FLAG_SHAPE) && nav->shape_len >= 4)
+        draw_sketch(nav);
+    else
+        draw_wrapped(&font_text, 110, 17, 19, 136, 4, nav->text, nav->text_len);
 
     char* p = put_str(buf, "C\xC3\xB2n ");  // "Còn "
     fmt_dist(p, (uint32_t)nav->remain_10m * 10);

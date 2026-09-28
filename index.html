@@ -339,6 +339,16 @@ progress[hidden] { display: none; }
         </select>
       </div>
     </div>
+    <div class="group">
+      <div class="row">
+        <span class="grow">Sơ đồ ngã rẽ</span>
+        <select id="sketchMode" style="width:auto">
+          <option value="auto">Khi không có tên đường</option>
+          <option value="always">Luôn hiện</option>
+          <option value="off">Tắt</option>
+        </select>
+      </div>
+    </div>
     <p class="foot">Trong vùng này nhãn cập nhật khoảng cách liên tục (làm tròn 10 m, dưới 100 m là 5 m). Ngoài vùng: 8–20 giây một lần.</p>
 
 
@@ -491,7 +501,9 @@ function onNotify(ev) {
   if (text.startsWith('mtu=')) {
     const mtu = parseInt(text.slice(4), 10);
     if (Number.isFinite(mtu) && mtu > 2) state.chunk = Math.max(18, Math.min(244, mtu - 2));
-    state.navFw = /\bnav=1\b/.test(text);
+    const navLevel = Number((text.match(/\bnav=(\d+)/) || [])[1] || 0);
+    state.navFw = navLevel >= 1;
+    state.navSketch = navLevel >= 2;
     log('← ' + text.trim(), 'rx');
     refreshInfo();
     return;
@@ -568,7 +580,7 @@ async function connect() {
 
 function resetConn() {
   state.ch = null;
-  state.fw = 0; state.modelId = null; state.mode = null; state.chunk = 128; state.navFw = false;
+  state.fw = 0; state.modelId = null; state.mode = null; state.chunk = 128; state.navFw = false; state.navSketch = false;
   setConn('Kết nối');
   refreshInfo();
 }
@@ -772,7 +784,10 @@ async function routeOsm(origin, dest, mode) {
   const j = await res.json().catch(() => ({}));
   if (!res.ok || j.code !== 'Ok' || !j.routes?.[0]) throw new Error('OpenStreetMap: ' + (j.message || 'không tìm thấy tuyến đường.'));
   const r = j.routes[0];
-  const steps = r.legs.flatMap(l => l.steps).map(s => ({ distance: s.distance, ...osmStep(s) }));
+  const steps = r.legs.flatMap(l => l.steps).map(s => {
+    const x = s.intersections?.[0];
+    return { distance: s.distance, ...osmStep(s), bearings: x?.bearings, inIdx: x?.in, outIdx: x?.out };
+  });
   return buildRoute(r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })), steps, r.duration);
 }
 function fetchRoute(origin) {
@@ -936,13 +951,135 @@ function drawNavScreen(info) {
   ctx.fillText(dist, 50, 96);
   ctx.fillRect(102, 6, 2, H - 12);
   ctx.textAlign = 'left';
-  ctx.font = `700 17px ${F_SANS}`;
-  wrapText(ctx, info.text || '', 138, 4).forEach((l, i) => ctx.fillText(l, 110, 6 + i * 21));
+  const sketch = sketchFor(info);
+  if (sketch) {
+    drawSketch(ctx, sketch, info.dist);
+  } else {
+    ctx.font = `700 17px ${F_SANS}`;
+    wrapText(ctx, info.text || '', 138, 4).forEach((l, i) => ctx.fillText(l, 110, 6 + i * 21));
+  }
   ctx.font = `13px ${F_SANS}`;
   ctx.fillText(`Còn ${fmtDist(info.remain)} · ${fmtClock(info.eta)}`, 110, 108);
   snapToPanel(ctx);
 }
 
+
+/* ---------- junction sketch ----------
+ * The route around the maneuver, rotated so we arrive from the bottom, plus the other roads
+ * at the junction (OpenStreetMap only). Drawn by the tag in its right panel (138x96 px):
+ * bytes = jx jy mpp10 nlines, then per line: width npts x y ... (route last). */
+const SK_W = 138, SK_H = 96, SK_JX = 69, SK_JY = 60;
+
+function hasStreetName(text) {
+  // Street names are capitalised ("Lê Lợi", "Ngõ 180", "QL1A"); the verb at the start is not.
+  return (text || '').split(/\s+/).slice(2).some(w => /^[\p{Lu}\d]/u.test(w));
+}
+
+function sketchFor(info) {
+  if (!info || info.arrived || info.code === 'arrive' || !nav.route) return null;
+  const pref = $('sketchMode')?.value || 'auto';
+  if (pref === 'off' || (pref === 'auto' && hasStreetName(info.text))) return null;
+  const step = nav.route.steps[info.idx];
+  if (!step) return null;
+  if (!step.sketch) step.sketch = buildSketch(nav.route, step);
+  return step.sketch;
+}
+
+function buildSketch(route, step) {
+  const m = step.start;
+  const M = pointAt(route, m);
+  const kx = Math.cos(rad(M.lat)) * R_EARTH * Math.PI / 180, ky = R_EARTH * Math.PI / 180;
+  const local = p => ({ e: (p.lng - M.lng) * kx, n: (p.lat - M.lat) * ky });
+  // Heading when arriving at the junction (over the last 25 m).
+  const pin = local(pointAt(route, Math.max(0, m - 25)));
+  let h = Math.atan2(-pin.e, -pin.n);
+  if (Math.hypot(pin.e, pin.n) < 1) { const po = local(pointAt(route, m + 25)); h = Math.atan2(po.e, po.n); }
+  const rot = ({ e, n }) => ({ x: e * Math.cos(h) - n * Math.sin(h), y: -(e * Math.sin(h) + n * Math.cos(h)) });
+
+  const pts = [];
+  for (let a = Math.max(0, m - 60); a < Math.min(route.total, m + 70); a += 5) pts.push(rot(local(pointAt(route, a))));
+  pts.push(rot(local(pointAt(route, Math.min(route.total, m + 70)))));
+  // Metres per pixel so the whole route piece fits around the junction point.
+  let mpp = 0.6;
+  for (const p of pts) mpp = Math.max(mpp, Math.abs(p.x) / (SK_JX - 3), -p.y / (SK_JY - 3), p.y / (SK_H - SK_JY - 2));
+  mpp = Math.min(25, mpp);
+  const px = p => [Math.max(0, Math.min(SK_W - 1, Math.round(SK_JX + p.x / mpp))), Math.max(0, Math.min(SK_H - 1, Math.round(SK_JY + p.y / mpp)))];
+
+  const lines = [];
+  if (Array.isArray(step.bearings)) {
+    step.bearings.forEach((b, i) => {
+      if (i === step.inIdx || i === step.outIdx) return;
+      const len = 45 * mpp;  // side roads: 45 px spokes
+      const end = rot({ e: Math.sin(rad(b)) * len, n: Math.cos(rad(b)) * len });
+      lines.push([3, [SK_JX, SK_JY, ...px(end)]]);
+    });
+  }
+  // Simplify to long straight segments (clean lines, and the arrow head points the right way).
+  const simple = simplifyLine(pts.map(p => ({ x: p.x / mpp, y: p.y / mpp })), 1.5).slice(-32);
+  lines.push([9, simple.flatMap(p => px({ x: p.x * mpp, y: p.y * mpp }))]);
+
+  const bytes = [SK_JX, SK_JY, Math.max(1, Math.round(mpp * 10)), lines.length];
+  for (const [w, p] of lines) bytes.push(w, p.length / 2, ...p);
+  return new Uint8Array(bytes.slice(0, 128));
+}
+
+// Ramer–Douglas–Peucker line simplification (tolerance in pixels).
+function simplifyLine(p, eps) {
+  if (p.length < 3) return p;
+  const a = p[0], b = p[p.length - 1];
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  let far = 0, idx = 0;
+  for (let i = 1; i < p.length - 1; i++) {
+    const d = Math.abs((b.x - a.x) * (a.y - p[i].y) - (a.x - p[i].x) * (b.y - a.y)) / len;
+    if (d > far) { far = d; idx = i; }
+  }
+  if (far <= eps) return [a, b];
+  return [...simplifyLine(p.slice(0, idx + 1), eps).slice(0, -1), ...simplifyLine(p.slice(idx), eps)];
+}
+
+// Same drawing as the firmware (GUI.c draw_sketch), for the on-phone preview.
+function drawSketch(ctx, sk, dist) {
+  const ox = 108, oy = 4, nlines = sk[3];
+  const mpp = (sk[2] || 10) / 10;
+  ctx.save();
+  ctx.strokeStyle = ctx.fillStyle = '#000';
+  ctx.lineJoin = 'round';
+  let i = 4;
+  for (let l = 0; l < nlines && i + 2 <= sk.length; l++) {
+    const w = sk[i], n = sk[i + 1];
+    const p = [];
+    for (let k = 0; k < n; k++) p.push([ox + sk[i + 2 + 2 * k], oy + sk[i + 3 + 2 * k]]);
+    i += 2 + 2 * n;
+    if (p.length < 2) continue;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'butt';
+    const route = l === nlines - 1;
+    let tip = p[p.length - 1], base = tip;
+    if (route) {
+      const prev = p[p.length - 2], head = w * 6 * 0.3, half = w * 6 * 0.2;
+      const len = Math.hypot(tip[0] - prev[0], tip[1] - prev[1]) || 1;
+      const ux = (tip[0] - prev[0]) / len, uy = (tip[1] - prev[1]) / len;
+      base = [tip[0] - ux * head * 0.9, tip[1] - uy * head * 0.9];
+      ctx.beginPath();
+      ctx.moveTo(...tip);
+      ctx.lineTo(base[0] - uy * half, base[1] + ux * half);
+      ctx.lineTo(base[0] + uy * half, base[1] - ux * half);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.moveTo(...p[0]);
+    for (let k = 1; k < p.length - 1; k++) ctx.lineTo(...p[k]);
+    ctx.lineTo(...base);
+    ctx.stroke();
+  }
+  const dy = dist / mpp;
+  if (sk[1] + dy + 6 <= SK_H) {
+    ctx.beginPath(); ctx.arc(ox + sk[0], oy + sk[1] + dy, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(ox + sk[0], oy + sk[1] + dy, 4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
 
 /* ---------- image quantization (black / white / red) ---------- */
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -1070,6 +1207,14 @@ async function maybeSend(force) {
   nav.sending = true;
   try {
     if (state.navFw) {
+      const sketch = state.navSketch ? sketchFor(info) : null;
+      if (sketch) {
+        if (nav.sketchIdx !== info.idx) {
+          await send(new Uint8Array([0x42, ...sketch]), true);
+          nav.sketchIdx = info.idx;
+        }
+        flags |= 0x10;
+      }
       await send(navPacket(info, flags), true);
     } else {
       state.busy = true;
@@ -1093,7 +1238,7 @@ async function reroute(from) {
   foot('navFoot', 'Lệch tuyến — đang tìm lại đường…');
   try {
     nav.route = await fetchRoute(from);
-    Object.assign(nav, { lastIdx: 0, offCount: 0, lastAlong: 0, simAlong: 0 });
+    Object.assign(nav, { lastIdx: 0, offCount: 0, lastAlong: 0, simAlong: 0, sketchIdx: null, cleanIdx: null });
     foot('navFoot', '');
   } catch (e) {
     foot('navFoot', e.message, true);
@@ -1166,7 +1311,7 @@ async function startNav() {
     $('btnNav').disabled = false;
     return;
   }
-  Object.assign(nav, { running: true, lastAlong: 0, lastIdx: 0, offCount: 0, lastKey: null, lastSentAt: 0, arrived: false, simAlong: 0, cleanIdx: null, speed: 0, lastFixAt: 0 });
+  Object.assign(nav, { running: true, lastAlong: 0, lastIdx: 0, offCount: 0, lastKey: null, lastSentAt: 0, arrived: false, simAlong: 0, cleanIdx: null, speed: 0, lastFixAt: 0, sketchIdx: null });
   log(`Tuyến đường: ${fmtDist(nav.route.total)}, ${nav.route.steps.length} bước, ~${Math.round(nav.route.duration / 60)} phút`);
   foot('navFoot', state.ch ? '' : 'Chưa kết nối nhãn — chỉ xem trước trên điện thoại.');
   $('btnNav').disabled = false;
@@ -1391,6 +1536,8 @@ function init() {
   $('simSpeedRow').hidden = !$('simOn').checked;
   $('simOn').onchange = () => { store.set('simOn', $('simOn').checked); $('simSpeedRow').hidden = !$('simOn').checked; };
   $('simSpeed').onchange = () => store.set('simSpeed', Number($('simSpeed').value) || 40);
+  $('sketchMode').value = store.get('sketchMode', 'auto');
+  $('sketchMode').onchange = () => { store.set('sketchMode', $('sketchMode').value); nav.sketchIdx = null; if (nav.info) drawNavScreen(nav.info); };
   $('apFrom').value = store.get('apFrom', 500);
   $('apEvery').value = store.get('apEvery', 1500);
   $('apFrom').onchange = () => store.set('apFrom', Number($('apFrom').value));

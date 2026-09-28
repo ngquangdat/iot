@@ -46,6 +46,8 @@ static struct {
 } m_shown;
 
 static nav_data_t m_nav_pending;
+static uint8_t m_shape_pending[NAV_SHAPE_MAX];  // last NAV_SHAPE packet
+static uint8_t m_shape_pending_len;
 static volatile bool m_nav_active, m_nav_force, m_nav_sched;
 
 static void render(screen_t scr, const nav_data_t* nav, uint32_t ts, uint16_t mv, int8_t temp) {
@@ -144,6 +146,14 @@ static void epd_nav_update(void* p_event_data, uint16_t event_size) {
     screen_update(event->p_epd, SCR_NAV, &nav, 0, force);
 }
 
+// NAV_SHAPE packet: 42 shape... (see nav_data_t); used by the next NAV packets with NAV_FLAG_SHAPE.
+static void epd_nav_shape_receive(uint8_t* p_data, uint16_t length) {
+    CRITICAL_REGION_ENTER();
+    m_shape_pending_len = MIN(length - 1, NAV_SHAPE_MAX);
+    memcpy(m_shape_pending, &p_data[1], m_shape_pending_len);
+    CRITICAL_REGION_EXIT();
+}
+
 // NAV packet: 40 flags icon dist_lo dist_hi remain_lo remain_hi eta_h eta_m text...
 static void epd_nav_receive(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length) {
     if (length < 9) return;
@@ -159,6 +169,10 @@ static void epd_nav_receive(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length) 
     m_nav_pending.text_len = MIN(length - 9, NAV_TEXT_MAX);
     memcpy(m_nav_pending.text, &p_data[9], m_nav_pending.text_len);
     if (p_data[1] & NAV_FLAG_FORCE) m_nav_force = true;
+    if (p_data[1] & NAV_FLAG_SHAPE) {
+        m_nav_pending.shape_len = m_shape_pending_len;
+        memcpy(m_nav_pending.shape, m_shape_pending, m_shape_pending_len);
+    }
     m_nav_active = true;
     schedule = !m_nav_sched;
     m_nav_sched = true;
@@ -218,7 +232,7 @@ static void epd_send_time(ble_epd_t* p_epd) {
 
 static void epd_send_mtu(ble_epd_t* p_epd) {
     char buf[40] = {0};
-    snprintf(buf, sizeof(buf), "mtu=%d nav=1", p_epd->max_data_len);
+    snprintf(buf, sizeof(buf), "mtu=%d nav=2", p_epd->max_data_len);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
     snprintf(buf, sizeof(buf), "cfg fast=%d every=%d off=%d var=%d", p_epd->settings.fast_refresh,
              p_epd->settings.full_every, p_epd->settings.x_offset, p_epd->settings.fast_variant);
@@ -321,6 +335,10 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
 
         case EPD_CMD_NAV:
             epd_nav_receive(p_epd, p_data, length);
+            break;
+
+        case EPD_CMD_NAV_SHAPE:
+            if (length >= 5) epd_nav_shape_receive(p_data, length);
             break;
 
         case EPD_CMD_NAV_CTRL:

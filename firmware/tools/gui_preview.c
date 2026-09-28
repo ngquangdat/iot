@@ -19,8 +19,17 @@ static void dump(const char* path) {
     fclose(f);
 }
 
+static const uint8_t sketch_left[] = {
+    // Bytes the web sends for a right turn at a 4-way junction (from the OSRM test route).
+    69, 60, 17, 3, 3, 2, 69, 60, 67, 15, 3, 2, 69, 60, 24, 62, 9, 3, 70, 94, 69, 60, 109, 58,
+};
+
 static void nav(const char* path, uint8_t icon, uint16_t dist, const char* text, uint8_t flags) {
-    nav_data_t n = {flags, icon, dist, 420, 14, 35, 0, {0}};
+    nav_data_t n = {flags, icon, dist, 420, 14, 35, 0, {0}, 0, {0}};
+    if (flags & NAV_FLAG_SHAPE) {
+        n.shape_len = sizeof(sketch_left);
+        memcpy(n.shape, sketch_left, sizeof(sketch_left));
+    }
     n.text_len = strlen(text);
     memcpy(n.text, text, n.text_len);
     gui_draw_nav(&n);
@@ -36,6 +45,8 @@ int main(void) {
     nav("build/nav_150.pbm", NAV_LEFT, 150, "Rẽ trái vào Nguyễn Trãi", 0);
     nav("build/nav_40.pbm", NAV_LEFT, 40, "Rẽ trái vào Nguyễn Trãi", 0);
     nav("build/nav_10.pbm", NAV_LEFT, 10, "Rẽ trái vào Nguyễn Trãi", 0);
+    nav("build/sketch_120.pbm", NAV_RIGHT, 120, "Rẽ phải", NAV_FLAG_SHAPE);
+    nav("build/sketch_30.pbm", NAV_RIGHT, 40, "Rẽ phải", NAV_FLAG_SHAPE);
     for (int i = 0; i <= NAV_ARRIVE; i++) {
         char p[40];
         snprintf(p, sizeof p, "build/icon_%02d.pbm", i);

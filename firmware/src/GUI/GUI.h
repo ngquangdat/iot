@@ -32,7 +32,9 @@ typedef enum {
 #define NAV_FLAG_ARRIVED 0x02  // destination reached
 #define NAV_FLAG_URGENT 0x04   // maneuver is close: don't spend 13 s on a periodic full refresh now
 #define NAV_FLAG_CLEANUP 0x08  // long straight ahead: good moment for a ghost-clearing full refresh
+#define NAV_FLAG_SHAPE 0x10    // draw the junction sketch (last NAV_SHAPE packet) instead of the text
 #define NAV_TEXT_MAX 160
+#define NAV_SHAPE_MAX 128
 
 typedef struct {
     uint8_t flags;
@@ -42,6 +44,10 @@ typedef struct {
     uint8_t eta_h, eta_m;
     uint8_t text_len;
     char text[NAV_TEXT_MAX];  // UTF-8 instruction
+    // Junction sketch in the right panel (138x96 px, origin 108,4):
+    // jx jy mpp10 nlines, then per line: width npts x0 y0 x1 y1 ... The last line is the route.
+    uint8_t shape_len;
+    uint8_t shape[NAV_SHAPE_MAX];
 } nav_data_t;
 
 #define GUI_W 250

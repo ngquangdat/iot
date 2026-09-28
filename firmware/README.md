@@ -17,6 +17,7 @@ cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×
 - Vẫn có **nạp qua Bluetooth không cần nút** (Secure DFU) để cập nhật lần sau.
 
 ## Hiển thị khi đến gần chỗ rẽ
+- Khi hướng dẫn không có tên đường: nửa phải vẽ **sơ đồ ngã rẽ** (tuyến đi đậm, nhánh khác mảnh, chấm vị trí chạy về ngã rẽ).
 - 500 m cuối: thanh tiến trình dưới mũi tên; dưới 50 m: nửa trái đảo màu (chữ trắng nền đen); dưới 20 m: "Ngay!".
 - Web gửi thưa khi còn xa (20 s, làm tròn 100 m), dày dần khi gần (dưới 100 m: ~1,5 s, làm tròn 5 m).
 - Refresh toàn màn định kỳ (~13 s, để xoá bóng mờ) được hoãn trong 400 m cuối và làm sớm sau khi rẽ nếu phía trước là đoạn thẳng dài.
@@ -50,6 +51,7 @@ make ota                     # cần nrfutil 6.x: pip install --ignore-requires-
 | Lệnh | Nội dung |
 |---|---|
 | `40 ff ii dd dd rr rr hh mm text…` | cờ (`01` ép refresh toàn màn, `02` đã đến, `04` sắp rẽ – hoãn refresh toàn màn định kỳ, `08` đường thẳng dài – nên dọn bóng mờ ngay), icon, khoảng cách (m, LE), còn lại (×10 m, LE), giờ:phút đến, chữ UTF-8 ≤160 byte |
+| `42 jx jy mpp w n x y …` | sơ đồ ngã rẽ cho các gói `40` có cờ `10`: tâm ngã rẽ, mét/điểm ảnh ×10, rồi các đường (độ dày, số điểm, toạ độ trong khung 138×96 bên phải); đường cuối là tuyến đi, có mũi tên |
 | `41 00` | dừng chỉ đường, quay lại đồng hồ/lịch |
 | `41 01 xx` | refresh nhanh bật (`01`) / tắt (`00`) |
 | `41 02 nn` | refresh toàn màn sau `nn` lần refresh nhanh |
