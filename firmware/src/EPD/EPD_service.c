@@ -48,6 +48,13 @@ static struct {
 static nav_data_t m_nav_pending;
 static uint8_t m_shape_pending[NAV_SHAPE_MAX];  // last NAV_SHAPE packet
 static uint8_t m_shape_pending_len;
+
+// Marquee for the one-line instruction above the sketch: after a new instruction arrives it
+// scrolls through once (a partial refresh every 2 s), then rests at the start.
+#define MARQUEE_STEP 56
+#define MARQUEE_DELAY 3  // seconds before scrolling starts
+static volatile uint16_t m_marquee_px, m_marquee_total;
+static volatile uint8_t m_marquee_passes, m_marquee_wait;
 static volatile bool m_nav_active, m_nav_force, m_nav_sched;
 
 static void render(screen_t scr, const nav_data_t* nav, uint32_t ts, uint16_t mv, int8_t temp) {
@@ -142,6 +149,8 @@ static void epd_nav_update(void* p_event_data, uint16_t event_size) {
     CRITICAL_REGION_EXIT();
 
     if (!m_nav_active) return;
+    nav.scroll_px = m_marquee_px;
+    m_marquee_total = gui_nav_marquee_width(&nav);
     if (!force && m_shown.screen == SCR_NAV && memcmp(&nav, &m_shown.nav, sizeof(nav)) == 0) return;
     screen_update(event->p_epd, SCR_NAV, &nav, 0, force);
 }
@@ -159,6 +168,12 @@ static void epd_nav_receive(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length) 
     if (length < 9) return;
     bool schedule;
     CRITICAL_REGION_ENTER();
+    uint8_t text_len = MIN(length - 9, NAV_TEXT_MAX);
+    if (text_len != m_nav_pending.text_len || memcmp(m_nav_pending.text, &p_data[9], text_len) != 0) {
+        m_marquee_px = 0;  // new instruction: show its start, then scroll through it once
+        m_marquee_passes = 1;
+        m_marquee_wait = MARQUEE_DELAY;
+    }
     memset(&m_nav_pending, 0, sizeof(m_nav_pending));
     m_nav_pending.flags = p_data[1];
     m_nav_pending.icon = p_data[2];
@@ -561,7 +576,32 @@ uint32_t ble_epd_string_send(ble_epd_t* p_epd, uint8_t* p_string, uint16_t lengt
     return sd_ble_gatts_hvx(p_epd->conn_handle, &hvx_params);
 }
 
+static void epd_marquee_tick(ble_epd_t* p_epd, uint32_t timestamp) {
+    if (!m_nav_active || !m_marquee_total || !m_marquee_passes) return;
+    if (m_marquee_wait) {
+        m_marquee_wait--;
+        return;
+    }
+    if (timestamp % 2) return;
+    uint16_t px = m_marquee_px + MARQUEE_STEP;
+    if (px >= m_marquee_total) {
+        px = 0;
+        m_marquee_passes--;
+    }
+    m_marquee_px = px;
+    bool schedule;
+    CRITICAL_REGION_ENTER();
+    schedule = !m_nav_sched;
+    m_nav_sched = true;
+    CRITICAL_REGION_EXIT();
+    if (schedule) {
+        epd_gui_update_event_t event = {p_epd, 0, false};
+        app_sched_event_put(&event, sizeof(event), epd_nav_update);
+    }
+}
+
 void ble_epd_on_timer(ble_epd_t* p_epd, uint32_t timestamp, bool force_update) {
+    epd_marquee_tick(p_epd, timestamp);
     // Update calendar on 00:00:00, clock on every minute
     if (force_update || (p_epd->config.display_mode == MODE_CALENDAR && timestamp % 86400 == 0) ||
         (p_epd->config.display_mode == MODE_CLOCK && timestamp % 60 == 0)) {

@@ -48,7 +48,10 @@ typedef struct {
     // jx jy mpp10 nlines, then per line: width npts x0 y0 x1 y1 ... The last line is the route.
     uint8_t shape_len;
     uint8_t shape[NAV_SHAPE_MAX];
+    uint16_t scroll_px;  // set by the firmware: marquee offset of the one-line text above the sketch
 } nav_data_t;
+
+#define NAV_MARQUEE_GAP 32  // blank pixels between the end of the text and its repeat
 
 #define GUI_W 250
 #define GUI_H 128
@@ -58,6 +61,8 @@ typedef struct {
 uint8_t* gui_buffer(void);
 
 void gui_draw_nav(const nav_data_t* nav);
+// Width the one-line instruction needs above the sketch (0 if it fits without scrolling).
+int gui_nav_marquee_width(const nav_data_t* nav);
 void gui_draw_clock(uint32_t local_ts, uint16_t mv, int8_t temp);
 void gui_draw_date(uint32_t local_ts, uint16_t mv, int8_t temp);
 

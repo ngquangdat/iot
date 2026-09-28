@@ -19,8 +19,10 @@ typedef struct {
 
 static bool m_ink_white;  // draw white on black (inverted panel) instead of black on white
 
+static int m_clip_l = 0, m_clip_r = GUI_W - 1;  // horizontal clip (marquee text)
+
 static void px(int x, int y) {
-    if ((unsigned)x >= GUI_W || (unsigned)y >= GUI_H) return;
+    if ((unsigned)x >= GUI_W || (unsigned)y >= GUI_H || x < m_clip_l || x > m_clip_r) return;
     uint8_t* b = &fb[(GUI_W - 1 - x) * (GUI_H / 8) + (y >> 3)];
     if (m_ink_white)
         *b |= 0x80 >> (y & 7);
@@ -364,9 +366,10 @@ static void fmt_hm(char* p, uint8_t h, uint8_t m) {
 static void clear(void) { memset(fb, 0xFF, sizeof(fb)); }
 
 #define SKETCH_X 108
-#define SKETCH_Y 4
+#define SKETCH_Y 22  // below the one-line instruction
 #define SKETCH_W 138
-#define SKETCH_H 96
+#define SKETCH_H 78
+#define LINE_BASE 17
 
 // Junction sketch: side roads thin, the route thick with an arrow head, and a dot for
 // the rider sliding up the incoming road as the distance counts down.
@@ -400,6 +403,12 @@ static void draw_sketch(const nav_data_t* nav) {
         fill_circle(cx, cy, 4);
         m_ink_white = false;
     }
+}
+
+int gui_nav_marquee_width(const nav_data_t* nav) {
+    if (!(nav->flags & NAV_FLAG_SHAPE) || nav->shape_len < 4) return 0;
+    int tw = text_width(&font_text, nav->text, nav->text_len);
+    return tw > SKETCH_W ? tw + NAV_MARQUEE_GAP : 0;
 }
 
 void gui_draw_nav(const nav_data_t* nav) {
@@ -441,9 +450,22 @@ void gui_draw_nav(const nav_data_t* nav) {
     m_ink_white = false;
 
     fill_rect(102, 4, 2, 116);
-    if ((nav->flags & NAV_FLAG_SHAPE) && nav->shape_len >= 4)
+    if ((nav->flags & NAV_FLAG_SHAPE) && nav->shape_len >= 4) {
+        // One-line instruction on top, scrolling (marquee) when it doesn't fit, sketch below.
+        int tw = text_width(&font_text, nav->text, nav->text_len);
+        m_clip_l = SKETCH_X;
+        m_clip_r = SKETCH_X + SKETCH_W - 1;
+        if (tw <= SKETCH_W) {
+            draw_text(&font_text, SKETCH_X, LINE_BASE, nav->text, nav->text_len);
+        } else {
+            int x = SKETCH_X - nav->scroll_px;
+            draw_text(&font_text, x, LINE_BASE, nav->text, nav->text_len);
+            draw_text(&font_text, x + tw + NAV_MARQUEE_GAP, LINE_BASE, nav->text, nav->text_len);
+        }
+        m_clip_l = 0;
+        m_clip_r = GUI_W - 1;
         draw_sketch(nav);
-    else
+    } else
         draw_wrapped(&font_text, 110, 17, 19, 136, 4, nav->text, nav->text_len);
 
     char* p = put_str(buf, "C\xC3\xB2n ");  // "Còn "

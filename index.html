@@ -343,8 +343,8 @@ progress[hidden] { display: none; }
       <div class="row">
         <span class="grow">Sơ đồ ngã rẽ</span>
         <select id="sketchMode" style="width:auto">
-          <option value="auto">Khi không có tên đường</option>
           <option value="always">Luôn hiện</option>
+          <option value="auto">Khi không có tên đường</option>
           <option value="off">Tắt</option>
         </select>
       </div>
@@ -953,6 +953,23 @@ function drawNavScreen(info) {
   ctx.textAlign = 'left';
   const sketch = sketchFor(info);
   if (sketch) {
+    // One-line instruction above the sketch; scrolls once like the tag (56 px every 2 s after 3 s).
+    ctx.font = `700 15px ${F_SANS}`;
+    const text = info.text || '';
+    const tw = ctx.measureText(text).width;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(108, 0, SK_W, SK_TOP); ctx.clip();
+    if (tw <= SK_W) {
+      ctx.fillText(text, 108, 3);
+    } else {
+      if (nav.marqueeIdx !== info.idx) { nav.marqueeIdx = info.idx; nav.marqueeAt = Date.now(); }
+      const total = tw + 32, t = (Date.now() - nav.marqueeAt) / 1000 - 3;
+      const steps = t < 0 ? 0 : Math.floor(t / 2) + 1;
+      const offset = steps * 56 >= total ? 0 : steps * 56;
+      ctx.fillText(text, 108 - offset, 3);
+      ctx.fillText(text, 108 - offset + total, 3);
+    }
+    ctx.restore();
     drawSketch(ctx, sketch, info.dist);
   } else {
     ctx.font = `700 17px ${F_SANS}`;
@@ -966,9 +983,9 @@ function drawNavScreen(info) {
 
 /* ---------- junction sketch ----------
  * The route around the maneuver, rotated so we arrive from the bottom, plus the other roads
- * at the junction (OpenStreetMap only). Drawn by the tag in its right panel (138x96 px):
+ * at the junction (OpenStreetMap only). Drawn by the tag in its right panel (138x78 px):
  * bytes = jx jy mpp10 nlines, then per line: width npts x y ... (route last). */
-const SK_W = 138, SK_H = 96, SK_JX = 69, SK_JY = 60;
+const SK_W = 138, SK_H = 78, SK_JX = 69, SK_JY = 48, SK_TOP = 22;  // sketch box below the one-line text
 
 function hasStreetName(text) {
   // Street names are capitalised ("Lê Lợi", "Ngõ 180", "QL1A"); the verb at the start is not.
@@ -977,7 +994,7 @@ function hasStreetName(text) {
 
 function sketchFor(info) {
   if (!info || info.arrived || info.code === 'arrive' || !nav.route) return null;
-  const pref = $('sketchMode')?.value || 'auto';
+  const pref = $('sketchMode')?.value || 'always';
   if (pref === 'off' || (pref === 'auto' && hasStreetName(info.text))) return null;
   const step = nav.route.steps[info.idx];
   if (!step) return null;
@@ -1039,7 +1056,7 @@ function simplifyLine(p, eps) {
 
 // Same drawing as the firmware (GUI.c draw_sketch), for the on-phone preview.
 function drawSketch(ctx, sk, dist) {
-  const ox = 108, oy = 4, nlines = sk[3];
+  const ox = 108, oy = SK_TOP, nlines = sk[3];
   const mpp = (sk[2] || 10) / 10;
   ctx.save();
   ctx.strokeStyle = ctx.fillStyle = '#000';
@@ -1536,8 +1553,8 @@ function init() {
   $('simSpeedRow').hidden = !$('simOn').checked;
   $('simOn').onchange = () => { store.set('simOn', $('simOn').checked); $('simSpeedRow').hidden = !$('simOn').checked; };
   $('simSpeed').onchange = () => store.set('simSpeed', Number($('simSpeed').value) || 40);
-  $('sketchMode').value = store.get('sketchMode', 'auto');
-  $('sketchMode').onchange = () => { store.set('sketchMode', $('sketchMode').value); nav.sketchIdx = null; if (nav.info) drawNavScreen(nav.info); };
+  $('sketchMode').value = store.get('sketchMode2', 'always');
+  $('sketchMode').onchange = () => { store.set('sketchMode2', $('sketchMode').value); nav.sketchIdx = null; if (nav.info) drawNavScreen(nav.info); };
   $('apFrom').value = store.get('apFrom', 500);
   $('apEvery').value = store.get('apEvery', 1500);
   $('apFrom').onchange = () => store.set('apFrom', Number($('apFrom').value));
