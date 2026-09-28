@@ -2,554 +2,390 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AESL0213C Controller</title>
-<meta name="description" content="Điều khiển nhãn điện tử AESL0213C (Nordic nRF52811, e-paper 2.13&quot; 250×128) qua Web Bluetooth.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<title>Nhãn chỉ đường</title>
+<meta name="description" content="Điều khiển nhãn e-paper AESL0213C (nRF52811) qua Bluetooth: chỉ đường, đồng hồ, lịch và ảnh.">
 <style>
 :root {
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --border: #dde1e7;
-  --text: #1b1f24;
-  --muted: #5f6b7a;
-  --accent: #1f6feb;
-  --accent-text: #ffffff;
-  --danger: #c62828;
-  --ok: #1a7f37;
-  --warn: #9a6700;
-  --epd-red: #d32f2f;
-  --radius: 12px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  --bg: #F2F2F7;
+  --card: #FFFFFF;
+  --label: #000000;
+  --label-2: rgba(60, 60, 67, .6);
+  --label-3: rgba(60, 60, 67, .3);
+  --sep: rgba(60, 60, 67, .18);
+  --fill: rgba(118, 118, 128, .12);
+  --fill-2: rgba(118, 118, 128, .2);
+  --blue: #007AFF;
+  --green: #34C759;
+  --red: #FF3B30;
+  --bar: rgba(249, 249, 249, .88);
+  --paper: #E9E7E2;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 8px 24px rgba(0, 0, 0, .06);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1216;
-    --surface: #171b21;
-    --surface-2: #1f242c;
-    --border: #2d333c;
-    --text: #e6e9ee;
-    --muted: #97a1ae;
-    --accent: #4c8dff;
-    --accent-text: #0b0f14;
-    --danger: #ff6b6b;
-    --ok: #3fb950;
-    --warn: #d29922;
+    --bg: #000000;
+    --card: #1C1C1E;
+    --label: #FFFFFF;
+    --label-2: rgba(235, 235, 245, .6);
+    --label-3: rgba(235, 235, 245, .3);
+    --sep: rgba(84, 84, 88, .6);
+    --fill: rgba(118, 118, 128, .24);
+    --fill-2: rgba(118, 118, 128, .32);
+    --blue: #0A84FF;
+    --green: #30D158;
+    --red: #FF453A;
+    --bar: rgba(22, 22, 24, .88);
+    --paper: #2C2C2E;
     --shadow: none;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f1216;
-  --surface: #171b21;
-  --surface-2: #1f242c;
-  --border: #2d333c;
-  --text: #e6e9ee;
-  --muted: #97a1ae;
-  --accent: #4c8dff;
-  --accent-text: #0b0f14;
-  --danger: #ff6b6b;
-  --ok: #3fb950;
-  --warn: #d29922;
-  --shadow: none;
-  color-scheme: dark;
+  --bg: #000000; --card: #1C1C1E; --label: #FFFFFF; --label-2: rgba(235, 235, 245, .6);
+  --label-3: rgba(235, 235, 245, .3); --sep: rgba(84, 84, 88, .6); --fill: rgba(118, 118, 128, .24);
+  --fill-2: rgba(118, 118, 128, .32); --blue: #0A84FF; --green: #30D158; --red: #FF453A;
+  --bar: rgba(22, 22, 24, .88); --paper: #2C2C2E; --shadow: none; color-scheme: dark;
 }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; }
 body {
   background: var(--bg);
-  color: var(--text);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--label);
+  font: 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  letter-spacing: -.01em;
+  -webkit-font-smoothing: antialiased;
 }
-.wrap { max-width: 1080px; margin: 0 auto; padding: 16px; }
-header.top {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
-  justify-content: space-between; margin-bottom: 16px;
-}
-.brand h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
-.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
-.conn { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 999px; font-size: 13px;
-  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
-  white-space: nowrap;
-}
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.pill.on .dot { background: var(--ok); }
-.pill.busy .dot { background: var(--warn); }
-button, .btn {
-  font: inherit; cursor: pointer; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
-  padding: 8px 14px; min-height: 38px;
-}
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: .5; cursor: not-allowed; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
-button.danger { color: var(--danger); }
-button.sm { padding: 4px 10px; min-height: 30px; font-size: 13px; }
-input, select, textarea {
-  font: inherit; color: var(--text); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-height: 38px;
-  max-width: 100%;
-}
-input[type="range"] { padding: 0; min-height: 0; border: 0; background: transparent; accent-color: var(--accent); }
-input[type="checkbox"] { min-height: 0; accent-color: var(--accent); }
-label { color: var(--muted); font-size: 13px; }
-.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
-@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-.card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; min-width: 0;
-}
-.card h2 { font-size: 15px; margin: 0 0 12px; }
-.card h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.row + .row { margin-top: 10px; }
-.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-.hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
-.status { font-size: 13px; margin-top: 8px; color: var(--muted); min-height: 1.5em; }
-.status.ok { color: var(--ok); }
-.status.err { color: var(--danger); }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
-.tab {
-  border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none;
-  padding: 10px 14px; color: var(--muted); font-weight: 600; white-space: nowrap;
-}
-.tab.active { color: var(--text); border-bottom-color: var(--accent); }
-.panel[hidden] { display: none; }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; margin: 0; }
-.kv dt { color: var(--muted); }
-.kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+button, input, select { font: inherit; color: inherit; letter-spacing: inherit; }
+.app { max-width: 560px; margin: 0 auto; padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
 
-/* E-paper preview */
-.epd-frame {
-  background: #e9e7e1; border-radius: 14px; padding: 14px;
-  border: 1px solid var(--border); display: flex; justify-content: center;
+/* Header */
+.top {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  padding: calc(18px + env(safe-area-inset-top)) 4px 14px;
 }
-:root[data-theme="dark"] .epd-frame { background: #2a2c30; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .epd-frame { background: #2a2c30; } }
-#out, #navOut {
-  width: 100%; max-width: 750px; aspect-ratio: 250 / 128; height: auto;
-  image-rendering: pixelated; image-rendering: crisp-edges;
-  background: #fff; border-radius: 3px; cursor: grab; touch-action: none;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+.top h1 { font-size: 32px; line-height: 1.1; font-weight: 700; letter-spacing: .01em; margin: 0; white-space: nowrap; }
+.conn {
+  display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer;
+  background: var(--card); color: var(--label); border-radius: 999px; padding: 7px 14px 7px 12px;
+  font-size: 15px; font-weight: 500; box-shadow: var(--shadow); white-space: nowrap; max-width: 46%;
 }
-#navOut { cursor: default; }
-#out.dragging { cursor: grabbing; }
-.nav-now { font-size: 18px; font-weight: 700; margin: 12px 0 4px; min-height: 1.5em; }
-#out.placing { cursor: crosshair; }
-.drop {
-  border: 1px dashed var(--border); border-radius: 10px; padding: 12px; text-align: center;
-  color: var(--muted); font-size: 13px;
+.conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--label-3); flex: none; }
+.conn.on .dot { background: var(--green); }
+.conn.busy .dot { background: var(--blue); animation: pulse 1s ease-in-out infinite; }
+.conn span:last-child { overflow: hidden; text-overflow: ellipsis; }
+@keyframes pulse { 50% { opacity: .3; } }
+
+/* Views */
+.view[hidden] { display: none; }
+.hero {
+  background: var(--card); border-radius: 20px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 24px;
 }
-.drop.over { border-color: var(--accent); color: var(--accent); }
-.slider { display: grid; grid-template-columns: 110px minmax(0, 1fr) 44px; align-items: center; gap: 8px; }
-.slider output { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
-.layers { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.layers li {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
-  background: var(--surface-2); font-size: 13px;
+.paper {
+  background: var(--paper); border-radius: 14px; padding: 12px; display: flex; justify-content: center;
 }
-.layers li.sel { outline: 2px solid var(--accent); }
-.layers li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); flex: none; }
-progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.paper canvas {
+  width: 100%; height: auto; aspect-ratio: 250 / 128; image-rendering: pixelated; image-rendering: crisp-edges;
+  background: #fff; border-radius: 4px; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .12);
+}
+.now { font-size: 20px; font-weight: 600; margin: 14px 2px 2px; min-height: 1.35em; }
+.meta { font-size: 15px; color: var(--label-2); margin: 0 2px; min-height: 1.35em; font-variant-numeric: tabular-nums; }
+
+/* Grouped lists (iOS "inset grouped") */
+.group-title { font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color: var(--label-2); margin: 0 16px 6px; }
+.group {
+  background: var(--card); border-radius: 12px; overflow: hidden; margin-bottom: 8px; box-shadow: var(--shadow);
+}
+.foot { font-size: 13px; color: var(--label-2); margin: 0 16px 24px; min-height: 1em; }
+.foot.err { color: var(--red); }
+.row {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 16px; position: relative;
+}
+.row + .row::before {
+  content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: var(--sep);
+}
+.row > .grow { flex: 1; min-width: 0; }
+.row .value { color: var(--label-2); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row input[type="text"], .row input[type="password"], .row input[type="number"], .row select {
+  border: 0; background: transparent; outline: none; width: 100%; min-width: 0; padding: 4px 0;
+}
+.row input::placeholder { color: var(--label-3); }
+.row select { text-align: right; text-align-last: right; color: var(--label-2); -webkit-appearance: none; appearance: none; }
+.row .icon { width: 22px; height: 22px; flex: none; color: var(--label-2); }
+.row.stack { flex-direction: column; align-items: stretch; gap: 8px; padding-top: 12px; padding-bottom: 12px; }
+.link { color: var(--blue); text-decoration: none; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* Segmented control */
+.seg { display: flex; background: var(--fill); border-radius: 9px; padding: 2px; gap: 2px; width: 100%; }
+.seg button {
+  flex: 1; border: 0; background: transparent; border-radius: 7px; padding: 6px 4px; font-size: 14px;
+  font-weight: 500; cursor: pointer; color: var(--label); white-space: nowrap;
+}
+.seg button[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 4px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .seg button[aria-pressed="true"] { background: #636366; } }
+.seg.small { width: auto; }
+.seg.small button { padding: 5px 12px; }
+
+/* Switch */
+.switch {
+  -webkit-appearance: none; appearance: none; width: 51px; height: 31px; border-radius: 999px; flex: none;
+  background: var(--fill-2); position: relative; cursor: pointer; transition: background .2s; margin: 0;
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
+  background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, .15), 0 1px 1px rgba(0, 0, 0, .16); transition: transform .2s;
+}
+.switch:checked { background: var(--green); }
+.switch:checked::after { transform: translateX(20px); }
+
+/* Buttons */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; cursor: pointer;
+  border-radius: 14px; padding: 15px 16px; font-size: 17px; font-weight: 600;
+  background: var(--blue); color: #fff; margin-bottom: 8px; transition: opacity .15s, transform .1s;
+}
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .4; cursor: default; transform: none; }
+.btn.tinted { background: var(--fill); color: var(--blue); }
+.btn.danger { background: var(--fill); color: var(--red); }
+.btns { display: flex; gap: 8px; }
+.btns .btn { flex: 1; }
+
+/* Mode tiles */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+.tile {
+  background: var(--card); border: 0; border-radius: 16px; padding: 16px; text-align: left; cursor: pointer;
+  box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; outline: 2px solid transparent;
+  transition: outline-color .15s;
+}
+.tile svg { width: 28px; height: 28px; color: var(--blue); }
+.tile b { font-size: 17px; font-weight: 600; }
+.tile small { font-size: 13px; color: var(--label-2); }
+.tile[aria-pressed="true"] { outline-color: var(--blue); }
+
+progress {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border: 0; border-radius: 2px;
+  background: var(--fill); overflow: hidden; display: block; margin: 12px 0 0;
+}
+progress::-webkit-progress-bar { background: var(--fill); }
+progress::-webkit-progress-value { background: var(--blue); border-radius: 2px; }
+progress::-moz-progress-bar { background: var(--blue); }
+progress[hidden] { display: none; }
+
 #log {
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  background: var(--surface-2); border-radius: 8px; padding: 10px;
-  height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0;
+  margin: 0; padding: 12px 16px; font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--label-2);
 }
-.log-err { color: var(--danger); }
-.log-rx { color: var(--accent); }
+#log .err { color: var(--red); }
+#log .rx { color: var(--blue); }
+
+/* Tab bar */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex; justify-content: center; gap: 8px;
+  padding: 6px 16px calc(6px + env(safe-area-inset-bottom));
+  background: var(--bar); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  border-top: .5px solid var(--sep);
+}
+.tabbar button {
+  flex: 1; max-width: 140px; border: 0; background: none; cursor: pointer; color: var(--label-3);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 500; padding: 4px 0;
+}
+.tabbar svg { width: 26px; height: 26px; }
+.tabbar button[aria-selected="true"] { color: var(--blue); }
+
 .banner {
-  border: 1px solid var(--warn); color: var(--text); background: var(--surface);
-  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; font-size: 14px;
+  background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; font-size: 15px;
+  color: var(--label-2); box-shadow: var(--shadow);
 }
 .banner[hidden] { display: none; }
-details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-.mode-btns button.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0 24px; }
+.banner b { color: var(--label); }
 </style>
 </head>
 <body>
-<div class="wrap">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-nav" viewBox="0 0 24 24"><path fill="currentColor" d="M20.6 3.4a1 1 0 0 0-1.1-.2l-16 7a1 1 0 0 0 .1 1.9l6.6 1.7 1.7 6.6a1 1 0 0 0 1.9.1l7-16a1 1 0 0 0-.2-1.1Z"/></symbol>
+  <symbol id="i-screen" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 20.5h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6.5 13.5 9.5 10l2.5 2.5L14 11l3.5 2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path fill="currentColor" d="M13.9 2.6a1 1 0 0 0-1-.8h-1.8a1 1 0 0 0-1 .8l-.3 1.9a7.7 7.7 0 0 0-1.6.9l-1.8-.7a1 1 0 0 0-1.2.4l-.9 1.6a1 1 0 0 0 .2 1.3l1.5 1.2a7.8 7.8 0 0 0 0 1.8l-1.5 1.2a1 1 0 0 0-.2 1.3l.9 1.6a1 1 0 0 0 1.2.4l1.8-.7c.5.4 1 .7 1.6.9l.3 1.9a1 1 0 0 0 1 .8h1.8a1 1 0 0 0 1-.8l.3-1.9a7.7 7.7 0 0 0 1.6-.9l1.8.7a1 1 0 0 0 1.2-.4l.9-1.6a1 1 0 0 0-.2-1.3l-1.5-1.2a7.8 7.8 0 0 0 0-1.8l1.5-1.2a1 1 0 0 0 .2-1.3l-.9-1.6a1 1 0 0 0-1.2-.4l-1.8.7a7.7 7.7 0 0 0-1.6-.9l-.3-1.9ZM12 15.3a3.3 3.3 0 1 1 0-6.6 3.3 3.3 0 0 1 0 6.6Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5.2l3.4 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="app">
   <header class="top">
-    <div class="brand">
-      <h1>AESL0213C Controller</h1>
-      <p>Nordic nRF52811 · e-paper 2.13" 250×128 · Web Bluetooth</p>
-    </div>
-    <div class="conn">
-      <span id="connPill" class="pill"><span class="dot"></span><span id="connText">Chưa kết nối</span></span>
-      <button id="btnConnect" class="primary" type="button">Quét &amp; kết nối</button>
-      <button id="btnReconnect" type="button" disabled>Kết nối lại</button>
-      <button id="btnTheme" type="button" class="sm" title="Đổi giao diện sáng/tối" aria-label="Đổi giao diện sáng/tối">◐</button>
-    </div>
+    <h1 id="title">Chỉ đường</h1>
+    <button id="conn" class="conn" type="button"><span class="dot"></span><span id="connText">Kết nối</span></button>
   </header>
 
   <div id="noBle" class="banner" hidden>
-    Trình duyệt này không hỗ trợ Web Bluetooth. Hãy dùng Chrome / Edge trên máy tính hoặc Android
-    (trên iOS dùng ứng dụng Bluefy), và mở trang qua HTTPS.
+    <b>Trình duyệt này không có Bluetooth.</b> Trên iPhone hãy mở trang bằng ứng dụng <b>Bluefy</b>;
+    trên Android hoặc máy tính dùng Chrome hoặc Edge.
   </div>
 
-  <nav class="tabs" role="tablist">
-    <button class="tab active" data-tab="device" role="tab">Thiết bị</button>
-    <button class="tab" data-tab="image" role="tab">Gửi ảnh / Nhãn</button>
-    <button class="tab" data-tab="nav" role="tab">Chỉ đường</button>
-    <button class="tab" data-tab="advanced" role="tab">Nâng cao</button>
-  </nav>
+  <!-- ===== Chỉ đường ===== -->
+  <section class="view" data-view="nav">
+    <div class="hero">
+      <div class="paper"><canvas id="navOut" width="250" height="128" aria-label="Xem trước màn hình nhãn"></canvas></div>
+      <div id="navNow" class="now">Sẵn sàng</div>
+      <div id="navMeta" class="meta">Nhập điểm đến để bắt đầu.</div>
+    </div>
 
-  <div class="grid">
-    <main>
-      <!-- ============ DEVICE TAB ============ -->
-      <section class="panel" data-panel="device">
-        <div class="card">
-          <h2>Chế độ hiển thị</h2>
-          <div class="row mode-btns">
-            <button type="button" data-mode="1">📅 Lịch</button>
-            <button type="button" data-mode="2" title="Bấm lần nữa để đổi mặt đồng hồ">🕒 Đồng hồ</button>
-            <button type="button" data-mode="0">🖼 Ảnh</button>
-          </div>
-          <p class="hint">Mỗi lần chuyển chế độ, trang sẽ đồng bộ luôn giờ hiện tại của máy. Ở chế độ Đồng hồ, bấm lại để đổi kiểu mặt đồng hồ.</p>
+    <div class="group">
+      <label class="row">
+        <svg class="icon"><use href="#i-search"/></svg>
+        <input id="navDest" class="grow" type="text" placeholder="Điểm đến" autocomplete="off" enterkeyhint="go">
+      </label>
+      <div class="row">
+        <div class="seg" id="navMode" role="group" aria-label="Phương tiện">
+          <button type="button" data-v="TWO_WHEELER">Xe máy</button>
+          <button type="button" data-v="DRIVE">Ô tô</button>
+          <button type="button" data-v="BICYCLE">Xe đạp</button>
+          <button type="button" data-v="WALK">Đi bộ</button>
         </div>
-
-        <div class="card">
-          <h2>Thời gian</h2>
-          <div class="row">
-            <button id="btnSyncTime" type="button" class="primary">Đồng bộ giờ</button>
-            <div class="field">
-              <label for="tzHours">Múi giờ (UTC±)</label>
-              <input id="tzHours" type="number" min="-12" max="14" step="1" style="width:90px">
-            </div>
-            <div class="field">
-              <label for="weekStart">Ngày đầu tuần</label>
-              <select id="weekStart">
-                <option value="1">Thứ 2</option>
-                <option value="0">Chủ Nhật</option>
-              </select>
-            </div>
-          </div>
-          <div id="timeStatus" class="status" role="status"></div>
-        </div>
-
-        <div class="card">
-          <h2>Lịch ngủ màn hình</h2>
-          <p class="hint" style="margin-top:0">Đồng hồ vẫn chạy nhưng màn hình ngừng refresh trong khoảng này để tiết kiệm pin (ví dụ 23:00 → 07:00).</p>
-          <div class="row" style="margin-top:10px">
-            <div class="field"><label for="sleepStart">Ngủ lúc</label><input id="sleepStart" type="time" value="23:00" step="60"></div>
-            <div class="field"><label for="sleepEnd">Thức lúc</label><input id="sleepEnd" type="time" value="07:00" step="60"></div>
-          </div>
-          <div class="row">
-            <button id="btnSleepRead" type="button">Đọc lịch</button>
-            <button id="btnSleepOn" type="button" class="primary">Lưu &amp; bật</button>
-            <button id="btnSleepOff" type="button" class="danger">Tắt lịch</button>
-          </div>
-          <div id="sleepStatus" class="status" role="status">Chưa đọc lịch.</div>
-        </div>
-      </section>
-
-      <!-- ============ IMAGE TAB ============ -->
-      <section class="panel" data-panel="image" hidden>
-        <div class="card">
-          <div class="epd-frame"><canvas id="out" width="250" height="128" aria-label="Xem trước màn hình e-paper"></canvas></div>
-          <p class="hint">Xem trước đúng 250×128 điểm ảnh và 3 màu thật của màn. Kéo trên hình để di chuyển ảnh hoặc chữ.</p>
-          <div class="row" style="margin-top:12px">
-            <button id="btnSend" type="button" class="primary">Gửi lên màn hình</button>
-            <button id="btnClearScreen" type="button">Xóa trắng màn</button>
-            <button id="btnDownload" type="button" class="sm">Tải PNG</button>
-          </div>
-          <div style="margin-top:10px"><progress id="sendProgress" max="100" value="0"></progress></div>
-          <div id="sendStatus" class="status" role="status"></div>
-        </div>
-
-        <div class="card">
-          <h2>Ảnh nền</h2>
-          <div id="drop" class="drop">
-            Kéo thả ảnh vào đây hoặc
-            <label class="btn" style="display:inline-block;padding:4px 10px;margin-left:4px;color:var(--text)">chọn tệp
-              <input id="file" type="file" accept="image/*" hidden>
-            </label>
-            · hoặc dán (Ctrl+V)
-          </div>
-          <div class="row">
-            <button type="button" class="sm" data-fit="fit">Vừa khung</button>
-            <button type="button" class="sm" data-fit="fill">Phủ kín</button>
-            <button type="button" class="sm" data-fit="stretch">Kéo giãn</button>
-            <button type="button" class="sm" id="btnRotL">⟲ 90°</button>
-            <button type="button" class="sm" id="btnRotR">⟳ 90°</button>
-            <button type="button" class="sm" id="btnCenter">Căn giữa</button>
-            <button type="button" class="sm danger" id="btnRemoveImg">Bỏ ảnh</button>
-          </div>
-          <div class="row" style="display:block">
-            <div class="slider"><label for="zoom">Thu phóng</label><input id="zoom" type="range" min="10" max="400" value="100"><output id="zoomV">100%</output></div>
-            <div class="slider"><label for="bright">Độ sáng</label><input id="bright" type="range" min="-100" max="100" value="0"><output id="brightV">0</output></div>
-            <div class="slider"><label for="contrast">Tương phản</label><input id="contrast" type="range" min="-100" max="100" value="0"><output id="contrastV">0</output></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2>Màu &amp; dithering</h2>
-          <div class="fields">
-            <div class="field">
-              <label for="palette">Bảng màu</label>
-              <select id="palette">
-                <option value="bwr">Đen / Trắng / Đỏ</option>
-                <option value="bw">Đen / Trắng</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="dither">Thuật toán</label>
-              <select id="dither">
-                <option value="none">Không dither (ngưỡng)</option>
-                <option value="fs" selected>Floyd–Steinberg</option>
-                <option value="atkinson">Atkinson</option>
-                <option value="bayer">Bayer 4×4</option>
-              </select>
-            </div>
-          </div>
-          <div class="row" style="display:block">
-            <div class="slider"><label for="thresh">Ngưỡng đen</label><input id="thresh" type="range" min="10" max="245" value="128"><output id="threshV">128</output></div>
-            <div class="slider"><label for="redSens">Độ nhạy đỏ</label><input id="redSens" type="range" min="10" max="200" value="80"><output id="redSensV">80</output></div>
-          </div>
-          <p class="hint">Chữ và khung vẽ thêm luôn được giữ sắc nét, chỉ ảnh nền mới bị dither.</p>
-        </div>
-
-        <div class="card">
-          <h2>Mẫu nhãn giá</h2>
-          <div class="fields">
-            <div class="field"><label for="tplName">Tên sản phẩm</label><input id="tplName" value="Cà phê sữa đá"></div>
-            <div class="field"><label for="tplPrice">Giá bán</label><input id="tplPrice" value="29.000"></div>
-            <div class="field"><label for="tplUnit">Đơn vị</label><input id="tplUnit" value="đ/ly"></div>
-            <div class="field"><label for="tplOld">Giá cũ (tùy chọn)</label><input id="tplOld" value="35.000"></div>
-            <div class="field"><label for="tplNote">Dòng phụ</label><input id="tplNote" value="Khuyến mãi đến 30/10"></div>
-            <div class="field">
-              <label for="tplStyle">Kiểu</label>
-              <select id="tplStyle">
-                <option value="red">Dải đỏ phía trên</option>
-                <option value="black">Dải đen phía trên</option>
-                <option value="plain">Tối giản</option>
-              </select>
-            </div>
-          </div>
-          <div class="row"><button id="btnTemplate" type="button">Áp dụng mẫu</button></div>
-          <p class="hint">Mẫu sẽ thay thế các lớp chữ hiện có; sau đó vẫn chỉnh/kéo từng lớp được.</p>
-        </div>
-
-        <div class="card">
-          <h2>Chữ &amp; lớp</h2>
-          <div class="fields">
-            <div class="field" style="grid-column:1/-1"><label for="txt">Nội dung</label><input id="txt" placeholder="Nhập chữ…" maxlength="120"></div>
-            <div class="field"><label for="txtSize">Cỡ chữ (px)</label><input id="txtSize" type="number" min="6" max="128" value="20"></div>
-            <div class="field">
-              <label for="txtColor">Màu</label>
-              <select id="txtColor">
-                <option value="#000000">Đen</option>
-                <option value="#ff0000">Đỏ</option>
-                <option value="#ffffff">Trắng</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="txtFont">Font</label>
-              <select id="txtFont">
-                <option value="system-ui, Arial, sans-serif">Sans</option>
-                <option value="Georgia, 'Times New Roman', serif">Serif</option>
-                <option value="ui-monospace, Consolas, monospace">Mono</option>
-              </select>
-            </div>
-            <div class="field" style="justify-content:flex-end">
-              <label><input id="txtBold" type="checkbox" checked> Đậm</label>
-            </div>
-          </div>
-          <div class="row">
-            <button id="btnAddText" type="button">Thêm chữ → bấm vị trí trên hình</button>
-            <button id="btnUpdText" type="button" class="sm" disabled>Cập nhật lớp đang chọn</button>
-          </div>
-          <ul id="layers" class="layers"></ul>
-        </div>
-      </section>
-
-      <!-- ============ NAVIGATION TAB ============ -->
-      <section class="panel" data-panel="nav" hidden>
-        <div class="card">
-          <div class="epd-frame"><canvas id="navOut" width="250" height="128" aria-label="Xem trước màn hình chỉ đường"></canvas></div>
-          <div id="navNow" class="nav-now">Chưa bắt đầu.</div>
-          <dl class="kv">
-            <dt>Còn lại</dt><dd id="navRemain">—</dd>
-            <dt>Dự kiến đến</dt><dd id="navEta">—</dd>
-            <dt>GPS</dt><dd id="navGps">—</dd>
-            <dt>Gửi lên nhãn</dt><dd id="navSent">—</dd>
-          </dl>
-          <div class="row" style="margin-top:12px">
-            <button id="btnNavStart" type="button" class="primary">Bắt đầu chỉ đường</button>
-            <button id="btnNavStop" type="button" class="danger" disabled>Dừng</button>
-            <button id="btnNavReroute" type="button" disabled>Tính lại tuyến</button>
-          </div>
-          <div id="navStatus" class="status" role="status"></div>
-        </div>
-
-        <div class="card">
-          <h2>Tuyến đường</h2>
-          <div class="fields">
-            <div class="field" style="grid-column:1/-1"><label for="navDest">Điểm đến (địa chỉ hoặc "vĩ độ, kinh độ")</label><input id="navDest" placeholder="vd: Chợ Bến Thành, Quận 1"></div>
-            <div class="field" style="grid-column:1/-1"><label for="navOrigin">Điểm xuất phát (để trống = vị trí GPS hiện tại)</label><input id="navOrigin" placeholder="Vị trí của tôi"></div>
-            <div class="field">
-              <label for="navMode">Phương tiện</label>
-              <select id="navMode">
-                <option value="TWO_WHEELER">Xe máy</option>
-                <option value="DRIVE">Ô tô</option>
-                <option value="BICYCLE">Xe đạp</option>
-                <option value="WALK">Đi bộ</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="navProvider">Nguồn chỉ đường</label>
-              <select id="navProvider">
-                <option value="google">Google Maps (cần API key)</option>
-                <option value="osm">OpenStreetMap (miễn phí)</option>
-              </select>
-            </div>
-          </div>
-          <div class="row" style="margin-top:12px">
-            <label><input id="navSim" type="checkbox"> Mô phỏng di chuyển (thử tại chỗ, không cần đi thật)</label>
-            <div class="field"><label for="navSimSpeed">Tốc độ mô phỏng (km/h)</label><input id="navSimSpeed" type="number" min="5" max="300" value="40" style="width:100px"></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2>Google Maps API key</h2>
-          <div class="row">
-            <input id="navKey" type="password" autocomplete="off" placeholder="AIza…" style="flex:1;min-width:200px">
-            <button id="btnKeySave" type="button">Lưu</button>
-            <button id="btnKeyClear" type="button" class="sm danger">Xóa</button>
-          </div>
-          <div id="keyStatus" class="status" role="status"></div>
-          <p class="hint">Key chỉ được lưu trong trình duyệt của bạn, không đưa lên GitHub. Trong Google Cloud hãy bật <strong>Routes API</strong> và giới hạn key: <em>Website restrictions</em> = <code>https://ngquangdat.github.io/*</code>, <em>API restrictions</em> = Routes API.</p>
-        </div>
-
-        <div class="card">
-          <h2>Cập nhật lên nhãn</h2>
-          <label style="display:block"><input id="navAutoSend" type="checkbox" checked> Tự gửi lên nhãn khi đang kết nối</label>
-          <label style="display:block;margin-top:6px"><input id="navRed" type="checkbox"> Mũi tên màu đỏ</label>
-          <div class="row" style="margin-top:10px">
-            <div class="field"><label for="navMinGap">Khoảng cách tối thiểu giữa 2 lần gửi (giây)</label><input id="navMinGap" type="number" min="5" max="300" value="25" style="width:120px"></div>
-          </div>
-          <p class="hint">Với firmware gốc, mỗi lần gửi là một lần refresh 3 màu (~15–20 giây), nên web chỉ gửi khi sang hướng rẽ mới hoặc khi vượt các mốc 2 km, 1 km, 500 m, 300 m, 150 m, 50 m. Với firmware AESL0213C mới (có <code>nav=1</code>), web chỉ gửi lệnh nhỏ và nhãn tự vẽ: xa chỗ rẽ cập nhật thưa (20 giây), càng gần càng dày (dưới 100 m: ~1,5 giây), dưới 50 m đảo màu nền để dễ nhìn.</p>
-        </div>
-      </section>
-
-      <!-- ============ ADVANCED TAB ============ -->
-      <section class="panel" data-panel="advanced" hidden>
-        <div class="card">
-          <h2>Kích hoạt</h2>
-          <p class="hint" style="margin-top:0">Một số firmware bị khóa cho tới khi kích hoạt. Kiểm tra trước; nếu firmware kiểu "legacy" báo <em>locked</em>, mã được tính từ 4 ký tự hex cuối của tên Bluetooth.</p>
-          <div class="row" style="margin-top:10px">
-            <button id="btnActQuery" type="button">Kiểm tra kích hoạt</button>
-            <input id="actCode" placeholder="Mã (hex, để trống = tự tính)" style="width:230px">
-            <button id="btnActivate" type="button">Kích hoạt</button>
-          </div>
-          <div id="actStatus" class="status" role="status"></div>
-        </div>
-        <div class="card" id="fwNavCard" hidden>
-          <h2>Firmware chỉ đường</h2>
-          <label style="display:block"><input id="fwFast" type="checkbox" checked> Refresh nhanh (chỉ đen trắng, thử nghiệm)</label>
-          <div class="row" style="margin-top:10px">
-            <div class="field"><label for="fwFullEvery">Refresh toàn màn sau mỗi … lần cập nhật nhanh</label><input id="fwFullEvery" type="number" min="1" max="100" value="20" style="width:100px"></div>
-            <button id="btnFwApply" type="button">Lưu vào nhãn</button>
-          </div>
-          <div class="row" style="margin-top:10px">
-            <div class="field">
-              <label for="fwOffset">Căn dọc hình (nếu mép trên bị che hoặc mép dưới có sọc)</label>
-              <select id="fwOffset">
-                <option value="0">Dịch xuống 8 điểm ảnh</option>
-                <option value="1" selected>Chuẩn</option>
-                <option value="2">Dịch lên 8 điểm ảnh</option>
-              </select>
-            </div>
-            <button id="btnFwOffset" type="button">Áp dụng</button>
-          </div>
-          <div class="row" style="margin-top:10px">
-            <div class="field">
-              <label for="fwVariant">Cách refresh nhanh (thử lần lượt nếu màn vẫn nháy cả màn)</label>
-              <select id="fwVariant">
-                <option value="0">A – dạng sóng nạp từ firmware</option>
-                <option value="1">B – trình tự Waveshare</option>
-                <option value="2">C – dạng sóng có sẵn trong màn</option>
-              </select>
-            </div>
-            <button id="btnFwVariant" type="button">Áp dụng</button>
-          </div>
-          <p class="hint">Mỗi lần màn cập nhật, nhật ký hiện <code>upd=fast …ms</code> (refresh nhanh) hoặc <code>upd=full …ms lý do</code>.</p>
-          <div id="fwStatus" class="status" role="status"></div>
-        </div>
-
-        <div class="card">
-          <h2>Gửi lệnh thô</h2>
-          <div class="row">
-            <input id="rawHex" placeholder="vd: 01  hoặc  fbff" style="flex:1;min-width:180px;font-family:ui-monospace,monospace">
-            <button id="btnRaw" type="button">Gửi</button>
-          </div>
-          <details style="margin-top:12px">
-            <summary>Bảng lệnh (characteristic 62750002)</summary>
-            <dl class="kv" style="margin-top:8px">
-              <dt>01</dt><dd>Khởi tạo màn hình (init)</dd>
-              <dt>05</dt><dd>Refresh màn hình</dd>
-              <dt>20 tttttttt zz mm</dt><dd>Đặt giờ (unix BE), múi giờ, chế độ (0 ảnh · 1 lịch · 2 đồng hồ)</dd>
-              <dt>21 ww</dt><dd>Ngày đầu tuần (0 CN · 1 T2)</dd>
-              <dt>30 pp …</dt><dd>Ghi dữ liệu ảnh; pp = 00/f0 (đầu/tiếp) | 0f (đen) / 00 (đỏ)</dd>
-              <dt>fb ff</dt><dd>Đọc lịch ngủ</dd>
-              <dt>fb e sh sm eh em</dt><dd>Đặt lịch ngủ</dd>
-              <dt>a0 [cc cc]</dt><dd>Truy vấn / gửi mã kích hoạt</dd>
-              <dt>40 …</dt><dd>Firmware mới: màn chỉ đường (cờ, icon, khoảng cách, còn lại, giờ đến, chữ)</dd>
-              <dt>41 00 / 41 01 xx / 41 02 nn / 41 03 oo / 41 04 vv</dt><dd>Firmware mới: dừng chỉ đường / bật-tắt refresh nhanh / số lần giữa 2 lần refresh toàn màn / căn dọc hình (byte) / cách refresh nhanh (0–2)</dd>
-              <dt>00 mosi sclk cs dc rst busy bs</dt><dd>Đặt chân màn hình (nếu màn không hiện sau khi nạp firmware)</dd>
-            </dl>
-          </details>
-          <label style="display:block;margin-top:12px"><input id="flip180" type="checkbox"> Xoay ảnh 180° khi gửi (nếu màn lắp ngược)</label>
-        </div>
-      </section>
-    </main>
-
-    <aside>
-      <div class="card">
-        <h2>Thông tin thiết bị</h2>
-        <dl class="kv">
-          <dt>Tên</dt><dd id="infoName">—</dd>
-          <dt>Firmware</dt><dd id="infoFw">—</dd>
-          <dt>Model ID</dt><dd id="infoModel">—</dd>
-          <dt>Panel</dt><dd id="infoPanel">—</dd>
-          <dt>Chế độ</dt><dd id="infoMode">—</dd>
-          <dt>Gói ảnh</dt><dd id="infoChunk">128 byte</dd>
-          <dt>Chân (pin)</dt><dd id="infoPins">—</dd>
-        </dl>
       </div>
-      <div class="card">
-        <div class="row" style="justify-content:space-between;margin-bottom:8px">
-          <h2 style="margin:0">Nhật ký</h2>
-          <button id="btnClearLog" type="button" class="sm">Xóa</button>
+    </div>
+    <p id="navFoot" class="foot"></p>
+
+    <button id="btnNav" class="btn" type="button">Bắt đầu</button>
+  </section>
+
+  <!-- ===== Màn hình ===== -->
+  <section class="view" data-view="screen" hidden>
+    <div class="tiles">
+      <button class="tile" type="button" data-mode="2">
+        <svg><use href="#i-clock"/></svg><b>Đồng hồ</b><small>Giờ lớn, cập nhật mỗi phút</small>
+      </button>
+      <button class="tile" type="button" data-mode="1">
+        <svg><use href="#i-cal"/></svg><b>Lịch</b><small>Ngày, thứ, tháng</small>
+      </button>
+    </div>
+
+    <div class="group-title">Ảnh</div>
+    <div class="hero" style="margin-bottom:12px">
+      <div class="paper"><canvas id="imgOut" width="250" height="128" aria-label="Xem trước ảnh"></canvas></div>
+      <progress id="imgProgress" max="100" value="0" hidden></progress>
+    </div>
+    <div class="group">
+      <label class="row">
+        <span class="grow">Dùng màu đỏ</span>
+        <input id="imgRed" class="switch" type="checkbox" checked>
+      </label>
+    </div>
+    <p id="imgFoot" class="foot">Ảnh được cắt vừa màn 250×128 và chuyển sang đen, trắng, đỏ.</p>
+    <div class="btns">
+      <button id="btnPick" class="btn tinted" type="button">Chọn ảnh</button>
+      <button id="btnRotate" class="btn tinted" type="button" disabled>Xoay</button>
+    </div>
+    <button id="btnSendImg" class="btn" type="button" disabled>Gửi lên nhãn</button>
+    <input id="imgFile" type="file" accept="image/*" hidden>
+  </section>
+
+  <!-- ===== Cài đặt ===== -->
+  <section class="view" data-view="settings" hidden>
+    <div class="group-title">Nhãn</div>
+    <div class="group">
+      <div class="row"><span class="grow">Thiết bị</span><span id="infoName" class="value">Chưa kết nối</span></div>
+      <div class="row"><span class="grow">Firmware</span><span id="infoFw" class="value">—</span></div>
+    </div>
+    <p class="foot"></p>
+
+    <div class="group-title">Chỉ đường</div>
+    <div class="group">
+      <div class="row stack">
+        <span>Nguồn bản đồ</span>
+        <div class="seg" id="navProvider" role="group" aria-label="Nguồn bản đồ">
+          <button type="button" data-v="google">Google Maps</button>
+          <button type="button" data-v="osm">OpenStreetMap</button>
         </div>
-        <pre id="log" aria-live="polite"></pre>
       </div>
-    </aside>
-  </div>
-  <footer>Giao thức tương thích firmware EPD nRF52 (service 62750001-d828-918d-fb46-b6c11c675aec). Chạy hoàn toàn trong trình duyệt.</footer>
+      <div class="row">
+        <input id="gKey" class="grow" type="password" placeholder="Google API key" autocomplete="off">
+        <button id="btnKey" class="link" type="button">Lưu</button>
+      </div>
+      <label class="row">
+        <span class="grow">Chế độ thử</span>
+        <input id="simOn" class="switch" type="checkbox">
+      </label>
+      <div class="row" id="simSpeedRow">
+        <span class="grow">Tốc độ thử</span>
+        <input id="simSpeed" type="number" min="5" max="200" value="40" style="width:56px;text-align:right">
+        <span class="value">km/h</span>
+      </div>
+    </div>
+    <p id="keyFoot" class="foot">Google cần key có bật Routes API. OpenStreetMap miễn phí, không cần key. Chế độ thử chạy giả lập dọc tuyến đường.</p>
+
+    <div id="fwSection" hidden>
+      <div class="group-title">Màn hình</div>
+      <div class="group">
+        <label class="row">
+          <span class="grow">Cập nhật nhanh</span>
+          <input id="fwFast" class="switch" type="checkbox" checked>
+        </label>
+        <div class="row">
+          <span class="grow">Làm sạch toàn màn sau</span>
+          <select id="fwEvery" style="width:auto">
+            <option value="5">5 lần</option>
+            <option value="10">10 lần</option>
+            <option value="20">20 lần</option>
+            <option value="40">40 lần</option>
+          </select>
+        </div>
+        <div class="row">
+          <span class="grow">Căn dọc</span>
+          <div class="seg small" id="fwOffset" role="group" aria-label="Căn dọc">
+            <button type="button" data-v="2" aria-label="Dịch lên">↑</button>
+            <button type="button" data-v="1">Chuẩn</button>
+            <button type="button" data-v="0" aria-label="Dịch xuống">↓</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="grow">Kiểu cập nhật nhanh</span>
+          <div class="seg small" id="fwVariant" role="group" aria-label="Kiểu cập nhật nhanh">
+            <button type="button" data-v="0">A</button>
+            <button type="button" data-v="1">B</button>
+            <button type="button" data-v="2">C</button>
+          </div>
+        </div>
+      </div>
+      <p id="fwFoot" class="foot">Thay đổi được lưu ngay vào nhãn.</p>
+    </div>
+
+    <div class="group-title">Firmware</div>
+    <div class="group">
+      <a class="row link" href="https://github.com/ngquangdat/iot/raw/claude/adoring-turing-7mk7wl/firmware/release/aesl0213c-nav-ota.zip">
+        <span class="grow">Tải firmware mới nhất (.zip)</span><span aria-hidden="true">›</span>
+      </a>
+    </div>
+    <p class="foot">Nạp bằng ứng dụng nRF Device Firmware Update: chọn tệp zip → chọn nhãn → Upload.</p>
+
+    <div class="group-title">Nhật ký</div>
+    <div class="group"><pre id="log" aria-live="polite"></pre></div>
+    <p class="foot"><button id="btnClearLog" class="link" type="button">Xóa nhật ký</button></p>
+  </section>
 </div>
 
+<nav class="tabbar" role="tablist">
+  <button type="button" role="tab" data-tab="nav" aria-selected="true"><svg><use href="#i-nav"/></svg>Chỉ đường</button>
+  <button type="button" role="tab" data-tab="screen" aria-selected="false"><svg><use href="#i-screen"/></svg>Màn hình</button>
+  <button type="button" role="tab" data-tab="settings" aria-selected="false"><svg><use href="#i-gear"/></svg>Cài đặt</button>
+</nav>
 <script>
 'use strict';
 /* ================================================================
- * BLE protocol — nRF52 EPD firmware (2.13" 250x128, model 2)
+ * AESL0213C web controller — BLE protocol: nRF52 EPD firmware
+ * (service 62750001-…, see firmware/README.md)
  * ================================================================ */
 const SERVICE_UUID = '62750001-d828-918d-fb46-b6c11c675aec';
 const CHAR_UUID    = '62750002-d828-918d-fb46-b6c11c675aec';
 const VERSION_UUID = '62750003-d828-918d-fb46-b6c11c675aec';
-const CMD = {
-  INIT: 0x01, REFRESH: 0x05, SET_TIME: 0x20, WEEK_START: 0x21,
-  WRITE_IMAGE: 0x30, SLEEP: 0xfb, ACTIVATE: 0xa0,
-};
+const CMD = { INIT: 0x01, REFRESH: 0x05, SET_TIME: 0x20, WRITE_IMAGE: 0x30, NAV: 0x40, NAV_CTRL: 0x41 };
 const W = 250, H = 128;
-const MODE_NAMES = { 0: 'Ảnh', 1: 'Lịch', 2: 'Đồng hồ', 3: 'Đồng hồ (mặt 2)' };
+const FW_URL = 'https://github.com/ngquangdat/iot/raw/claude/adoring-turing-7mk7wl/firmware/release/aesl0213c-nav-ota.zip';
 
 const $ = id => document.getElementById(id);
 const sleepMs = ms => new Promise(r => setTimeout(r, ms));
@@ -561,10 +397,8 @@ const store = {
 };
 
 const state = {
-  device: null, server: null, ch: null,
-  fw: 0, modelId: null, panel: null, mode: 1,
-  chunk: 128, busy: false,
-  waiters: [],
+  device: null, ch: null, fw: 0, modelId: null, mode: null,
+  chunk: 128, navFw: false, busy: false, synced: false,
 };
 
 /* ---------- log ---------- */
@@ -575,36 +409,41 @@ function log(msg, cls) {
   if (cls) line.className = cls;
   const el = $('log');
   el.appendChild(line);
-  while (el.childNodes.length > 500) el.removeChild(el.firstChild);
+  while (el.childNodes.length > 400) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
 }
-function setStatus(id, msg, kind) {
+function foot(id, msg, isErr) {
   const el = $(id);
-  el.textContent = msg;
-  el.className = 'status' + (kind ? ' ' + kind : '');
+  el.textContent = msg || '';
+  el.classList.toggle('err', !!isErr);
+}
+
+/* ---------- segmented controls ---------- */
+function segSet(id, value) {
+  document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(value))));
+}
+function segGet(id) {
+  return document.querySelector(`#${id} button[aria-pressed="true"]`)?.dataset.v;
+}
+function segBind(id, onChange) {
+  document.querySelectorAll(`#${id} button`).forEach(b => {
+    b.onclick = () => { segSet(id, b.dataset.v); onChange(b.dataset.v); };
+  });
 }
 
 /* ---------- connection UI ---------- */
+// "NRF_EPD_D794" -> "Nhãn D794"
+const shortName = name => { const m = (name || '').match(/([0-9A-F]{4})$/i); return m ? 'Nhãn ' + m[1].toUpperCase() : (name || 'Đã kết nối'); };
 function setConn(text, cls) {
   $('connText').textContent = text;
-  $('connPill').className = 'pill' + (cls ? ' ' + cls : '');
+  $('conn').className = 'conn' + (cls ? ' ' + cls : '');
 }
 function refreshInfo() {
-  $('infoName').textContent = state.device?.name || '—';
-  $('infoFw').textContent = state.fw ? `v${state.fw} (0x${state.fw.toString(16)})` : '—';
-  $('infoModel').textContent = state.modelId ?? '—';
-  $('infoPanel').textContent = state.panel === 0x21 ? '2.13" (0x21)' : (state.panel != null ? '0x' + state.panel.toString(16) : (state.modelId ? '—' : '—'));
-  $('infoMode').textContent = state.ch ? (MODE_NAMES[state.mode] ?? state.mode) : '—';
-  $('infoChunk').textContent = state.chunk + ' byte';
-  $('infoPins').textContent = state.configHex || '—';
-  $('fwNavCard').hidden = !state.navFw;
-  document.querySelectorAll('.mode-btns button').forEach(b => {
-    const m = Number(b.dataset.mode);
-    b.classList.toggle('active', !!state.ch && (m === state.mode || (m === 2 && state.mode === 3)));
-  });
-  const connected = !!state.ch;
-  $('btnConnect').textContent = connected ? 'Ngắt kết nối' : 'Quét & kết nối';
-  $('btnReconnect').disabled = !state.device;
+  const on = !!state.ch;
+  $('infoName').textContent = on ? (state.device?.name || 'Nhãn') : 'Chưa kết nối';
+  $('infoFw').textContent = on && state.fw ? `v${state.fw}` + (state.navFw ? ' · chỉ đường' : '') : '—';
+  $('fwSection').hidden = !(on && state.navFw);
+  document.querySelectorAll('.tile').forEach(t => t.setAttribute('aria-pressed', String(on && Number(t.dataset.mode) === (state.mode === 3 ? 2 : state.mode))));
 }
 
 /* ---------- serialized GATT writes ---------- */
@@ -612,7 +451,7 @@ let writeChain = Promise.resolve();
 function send(bytes, quiet) {
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const job = writeChain.then(async () => {
-    if (!state.ch) throw new Error('Chưa kết nối thiết bị.');
+    if (!state.ch) throw new Error('Chưa kết nối nhãn.');
     if (!quiet) log('→ ' + hex(data));
     await state.ch.writeValueWithResponse(data);
   });
@@ -620,106 +459,56 @@ function send(bytes, quiet) {
   return job;
 }
 
-/* Wait for a notification matching predicate. */
-function waitFor(pred, timeoutMs) {
-  return new Promise(resolve => {
-    const w = { pred, resolve };
-    w.timer = setTimeout(() => {
-      state.waiters = state.waiters.filter(x => x !== w);
-      resolve(null);
-    }, timeoutMs);
-    state.waiters.push(w);
-  });
-}
-
 /* ---------- notifications ---------- */
 function onNotify(ev) {
   const v = ev.target.value;
   const d = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
-
-  for (const w of [...state.waiters]) {
-    if (w.pred(d)) {
-      clearTimeout(w.timer);
-      state.waiters = state.waiters.filter(x => x !== w);
-      w.resolve(d);
-    }
-  }
-
-  // Sleep schedule reply: fb state en sh sm eh em [active]
-  if ((d.length === 7 || d.length === 8) && d[0] === CMD.SLEEP && d[1] <= 2 && d[2] <= 1 &&
-      d[3] < 24 && d[4] < 60 && d[5] < 24 && d[6] < 60) {
-    log('← lịch ngủ ' + hex(d), 'log-rx');
-    showSleep(d);
-    return;
-  }
-  // Week start ack: 21 state ws
-  if (d.length === 3 && d[0] === CMD.WEEK_START && d[1] <= 2 && d[2] <= 1) {
-    log(`← ngày đầu tuần: trạng thái ${d[1]}, giá trị ${d[2]}`, 'log-rx');
-    return;
-  }
-  // Signed activation reply
-  if (d.length === 15 && d[0] === CMD.ACTIVATE) {
-    const code = String.fromCharCode(...d.slice(11, 15));
-    const active = d[2] !== 0;
-    log(`← kích hoạt: ${active ? 'đã kích hoạt' : 'đang khóa'} · mã thiết bị ${code}`, 'log-rx');
-    setStatus('actStatus', active ? `Đã kích hoạt (thiết bị ${code}).` : `Thiết bị đang khóa (${code}) — cần công cụ kích hoạt có chữ ký.`, active ? 'ok' : 'err');
-    return;
-  }
-
   const text = new TextDecoder().decode(d);
+
   if (text.startsWith('mtu=')) {
     const mtu = parseInt(text.slice(4), 10);
     if (Number.isFinite(mtu) && mtu > 2) state.chunk = Math.max(18, Math.min(244, mtu - 2));
     state.navFw = /\bnav=1\b/.test(text);
-    log(`← ${text.trim()} → gói ảnh ${state.chunk} byte`, 'log-rx');
-    if (state.navFw) log('Firmware hỗ trợ lệnh chỉ đường trực tiếp (refresh nhanh).', 'log-rx');
+    log('← ' + text.trim(), 'rx');
     refreshInfo();
     return;
   }
-  const cfgMatch = text.match(/^cfg fast=(\d+) every=(\d+) off=(\d+)(?: var=(\d+))?/);
-  if (cfgMatch) {
-    $('fwFast').checked = cfgMatch[1] !== '0';
-    $('fwFullEvery').value = cfgMatch[2];
-    if (Number(cfgMatch[3]) <= 2) $('fwOffset').value = cfgMatch[3];
-    if (cfgMatch[4] != null) $('fwVariant').value = Number(cfgMatch[4]) <= 2 ? cfgMatch[4] : '0';
-  }
-  if (text.startsWith('activation=')) {
-    const ok = text.startsWith('activation=ok');
-    log('← ' + text.trim(), 'log-rx');
-    setStatus('actStatus', ok ? 'Đã kích hoạt.' : 'Thiết bị đang khóa — nhập mã hoặc để trống để tự tính.', ok ? 'ok' : 'err');
+  const cfg = text.match(/^cfg fast=(\d+) every=(\d+) off=(\d+)(?: var=(\d+))?/);
+  if (cfg) {
+    log('← ' + text.trim(), 'rx');
+    $('fwFast').checked = cfg[1] !== '0';
+    const every = Number(cfg[2]);
+    $('fwEvery').value = [5, 10, 20, 40].reduce((a, b) => Math.abs(b - every) < Math.abs(a - every) ? b : a, 10);
+    segSet('fwOffset', Math.min(2, Number(cfg[3])));
+    segSet('fwVariant', cfg[4] != null && Number(cfg[4]) <= 2 ? cfg[4] : '0');
     return;
   }
-  // Config packet: byte 7 = model id, 11 = mode, 12 = week start, 13 = panel profile
-  if (d.length >= 8 && d.length <= 32 && [1, 2, 3, 4, 5, 7, 0x20].includes(d[7])) {
+  if (text.startsWith('t=')) {
+    log('← ' + text.trim(), 'rx');
+    autoSyncTime(parseInt(text.slice(2), 10));
+    return;
+  }
+  // Config packet: byte 7 = model id, 11 = display mode, 13 = panel profile
+  if (d.length >= 8 && d.length <= 32 && [1, 2, 3, 4, 5, 7, 0x20].includes(d[7]) && !/^[\x20-\x7e]+$/.test(text)) {
     state.modelId = d[7];
     if (d.length > 11) state.mode = d[11];
-    if (d.length > 12 && d[12] <= 1) $('weekStart').value = String(d[12]);
-    state.panel = d.length > 13 ? d[13] : null;
-    log(`← cấu hình: model ${state.modelId}, chế độ ${state.mode}` +
-        (state.panel === 0x21 ? ', panel 2.13"' : ''), 'log-rx');
-    // Raw config: pin map (MOSI, SCLK, CS, DC, RST, BUSY, BS, model, WAKEUP, LED, EN, ...) — needed for custom firmware.
-    state.configHex = hex(d);
-    log('← cấu hình thô: ' + state.configHex, 'log-rx');
-    if (state.modelId !== 2) log(`Cảnh báo: model ${state.modelId} không phải màn 2.13"/2.9" (model 2). Kiểm tra lại thiết bị.`, 'log-err');
+    log('← cấu hình: ' + hex(d), 'rx');
     refreshInfo();
     return;
   }
-  log('← ' + (/^[\x20-\x7e\r\n]+$/.test(text) ? text.trim() : hex(d)), 'log-rx');
+  log('← ' + (/^[\x20-\x7e\r\n]+$/.test(text) ? text.trim() : hex(d)), 'rx');
 }
 
 /* ---------- connect / disconnect ---------- */
-async function scanAndConnect() {
+async function toggleConnection() {
   if (state.ch) { state.device?.gatt?.disconnect(); return; }
   try {
-    setConn('Đang quét…', 'busy');
-    state.device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [SERVICE_UUID],
-    });
+    setConn('Đang tìm…', 'busy');
+    state.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SERVICE_UUID] });
     state.device.addEventListener('gattserverdisconnected', onDisconnected);
   } catch (e) {
-    setConn('Chưa kết nối');
-    log('Đã hủy quét: ' + e.message);
+    setConn('Kết nối');
+    log('Đã hủy: ' + e.message);
     return;
   }
   await connect();
@@ -729,42 +518,35 @@ async function connect() {
   try {
     setConn('Đang kết nối…', 'busy');
     log('Kết nối tới ' + (state.device.name || state.device.id));
-    state.server = await state.device.gatt.connect();
-    const svc = await state.server.getPrimaryService(SERVICE_UUID);
+    const server = await state.device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE_UUID);
     const ch = await svc.getCharacteristic(CHAR_UUID);
     try {
-      const vch = await svc.getCharacteristic(VERSION_UUID);
-      const vv = await vch.readValue();
-      state.fw = vv.getUint8(0);
+      state.fw = (await (await svc.getCharacteristic(VERSION_UUID)).readValue()).getUint8(0);
       log(`Firmware v${state.fw}`);
     } catch {
       state.fw = 0;
-      log('Không đọc được phiên bản firmware.');
     }
-    // Register the listener before enabling notifications: the firmware sends
-    // its config packet as soon as the CCCD is written.
+    // The firmware sends its config as soon as notifications are enabled.
     ch.addEventListener('characteristicvaluechanged', onNotify);
     await ch.startNotifications();
     state.ch = ch;
-    setConn('Đã kết nối', 'on');
+    state.synced = false;
+    setConn(shortName(state.device.name), 'on');
     refreshInfo();
     await send([CMD.INIT]);
-    await sleepMs(80);
-    readSleep().catch(() => {});
   } catch (e) {
-    log('Kết nối thất bại: ' + e.message, 'log-err');
-    if (/service/i.test(e.message)) log('Thiết bị không có dịch vụ EPD 62750001… — có thể firmware khác hoặc chọn nhầm thiết bị.', 'log-err');
+    log('Kết nối thất bại: ' + e.message, 'err');
     try { state.device?.gatt?.disconnect(); } catch { /* ignore */ }
     resetConn();
+    setConn('Thử lại');
   }
 }
 
 function resetConn() {
-  state.server = null; state.ch = null;
-  state.modelId = null; state.panel = null; state.fw = 0; state.chunk = 128; state.configHex = null; state.navFw = false;
-  state.waiters.forEach(w => { clearTimeout(w.timer); w.resolve(null); });
-  state.waiters = [];
-  setConn('Chưa kết nối');
+  state.ch = null;
+  state.fw = 0; state.modelId = null; state.mode = null; state.chunk = 128; state.navFw = false;
+  setConn('Kết nối');
   refreshInfo();
 }
 function onDisconnected() {
@@ -772,463 +554,39 @@ function onDisconnected() {
   resetConn();
 }
 
-/* ---------- time & modes ---------- */
-function tzHours() {
-  const v = parseInt($('tzHours').value, 10);
-  return Number.isFinite(v) ? v : Math.round(-new Date().getTimezoneOffset() / 60);
-}
-async function sendTimeAndMode(mode) {
+/* ---------- time ---------- */
+const tzHours = () => Math.round(-new Date().getTimezoneOffset() / 60);
+function timePacket(mode) {
   const ts = Math.floor(Date.now() / 1000);
-  const tz = tzHours();
-  await send([CMD.SET_TIME, (ts >>> 24) & 0xff, (ts >>> 16) & 0xff, (ts >>> 8) & 0xff, ts & 0xff, tz & 0xff, mode & 0xff]);
-  const prev = state.mode;
-  state.mode = (mode === 2 && (prev === 2 || prev === 3)) ? (prev === 2 ? 3 : 2) : mode;
+  return [CMD.SET_TIME, (ts >>> 24) & 0xff, (ts >>> 16) & 0xff, (ts >>> 8) & 0xff, ts & 0xff, tzHours() & 0xff, mode & 0xff];
+}
+// The tag reports its clock (local time) on connect; fix it quietly if it drifted.
+function autoSyncTime(deviceLocal) {
+  if (state.synced || !Number.isFinite(deviceLocal)) return;
+  state.synced = true;
+  const localNow = Math.floor(Date.now() / 1000) + tzHours() * 3600;
+  if (Math.abs(deviceLocal - localNow) <= 90) return;
+  const mode = state.mode === 3 ? 2 : (state.mode ?? 1);
+  log('Đồng bộ giờ cho nhãn.');
+  send(timePacket(mode)).catch(e => log('Đồng bộ giờ lỗi: ' + e.message, 'err'));
+}
+async function setMode(mode) {
+  if (!state.ch) { toggleConnection(); return; }
+  if (nav.running) stopNav(false);
+  await send(timePacket(mode));
+  state.mode = mode;
   refreshInfo();
-  const when = new Date(ts * 1000).toLocaleString('vi-VN', { hour12: false });
-  setStatus('timeStatus', `Đã đồng bộ ${when} (UTC${tz >= 0 ? '+' : ''}${tz}).`, 'ok');
-}
-async function guarded(fn, statusId) {
-  if (!state.ch) { log('Hãy kết nối thiết bị trước.', 'log-err'); if (statusId) setStatus(statusId, 'Chưa kết nối thiết bị.', 'err'); return; }
-  if (state.busy) { log('Đang bận, vui lòng chờ…'); return; }
-  state.busy = true;
-  try { await fn(); }
-  catch (e) { log('Lỗi: ' + e.message, 'log-err'); if (statusId) setStatus(statusId, 'Lỗi: ' + e.message, 'err'); }
-  finally { state.busy = false; }
-}
-
-/* ---------- sleep schedule ---------- */
-const isSleepReply = d => (d.length === 7 || d.length === 8) && d[0] === CMD.SLEEP && d[1] <= 2;
-const pad2 = n => String(n).padStart(2, '0');
-function showSleep(d) {
-  if (d[1] === 1) { setStatus('sleepStatus', 'Thiết bị đang lưu lịch…'); return; }
-  if (d[1] === 2) { setStatus('sleepStatus', 'Thiết bị không lưu được lịch. Đợi vài giây rồi thử lại.', 'err'); return; }
-  $('sleepStart').value = `${pad2(d[3])}:${pad2(d[4])}`;
-  $('sleepEnd').value = `${pad2(d[5])}:${pad2(d[6])}`;
-  const range = `${pad2(d[3])}:${pad2(d[4])} → ${pad2(d[5])}:${pad2(d[6])}`;
-  setStatus('sleepStatus', d[2] ? `Lịch ngủ đang BẬT: ${range}` + (d.length === 8 && d[7] ? ' (đang trong giờ ngủ)' : '') : 'Lịch ngủ đang TẮT.', 'ok');
-}
-async function readSleep() {
-  setStatus('sleepStatus', 'Đang đọc lịch…');
-  const reply = waitFor(isSleepReply, 3000);
-  await send([CMD.SLEEP, 0xff]);
-  if (!await reply) setStatus('sleepStatus', 'Firmware không phản hồi lệnh lịch ngủ (có thể chưa hỗ trợ).', 'err');
-}
-async function writeSleep(enabled) {
-  const [sh, sm] = $('sleepStart').value.split(':').map(Number);
-  const [eh, em] = $('sleepEnd').value.split(':').map(Number);
-  if ([sh, sm, eh, em].some(n => !Number.isFinite(n))) throw new Error('Nhập đủ giờ ngủ và giờ thức.');
-  if (enabled && sh === eh && sm === em) throw new Error('Giờ ngủ và giờ thức phải khác nhau.');
-  setStatus('sleepStatus', 'Đang lưu…');
-  let reply = waitFor(isSleepReply, 30000);
-  await send([CMD.SLEEP, enabled ? 1 : 0, sh, sm, eh, em]);
-  let d = await reply;
-  const deadline = Date.now() + 30000;
-  while (d && d[1] === 1 && Date.now() < deadline) {
-    await sleepMs(400);
-    reply = waitFor(isSleepReply, 5000);
-    await send([CMD.SLEEP, 0xff], true);
-    d = await reply;
-  }
-  if (!d) throw new Error('Thiết bị không xác nhận lịch ngủ.');
-  if (d[1] !== 0) throw new Error('Thiết bị không lưu được lịch.');
-  log(enabled ? 'Đã lưu và bật lịch ngủ.' : 'Đã tắt lịch ngủ.');
-}
-
-/* ---------- activation ---------- */
-function legacyCode() {
-  const m = (state.device?.name || '').match(/([0-9a-fA-F]{4})$/);
-  if (!m) return null;
-  const code = (parseInt(m[1], 16) ^ 0x7611) & 0xffff;
-  return code === 0xffff ? 0 : code;
 }
 
 /* ================================================================
- * Image editor
- * ================================================================ */
-const out = $('out');
-const outCtx = out.getContext('2d', { willReadFrequently: true });
-const work = document.createElement('canvas');
-work.width = W; work.height = H;
-const workCtx = work.getContext('2d', { willReadFrequently: true });
-const layerCanvas = document.createElement('canvas');
-layerCanvas.width = W; layerCanvas.height = H;
-const layerCtx = layerCanvas.getContext('2d', { willReadFrequently: true });
-
-const ed = {
-  img: null, fit: 'fill', rot: 0, zoom: 1, ox: 0, oy: 0,
-  layers: [], sel: -1, placing: false,
-};
-
-function baseScale(iw, ih) {
-  const rw = ed.rot % 180 === 0 ? iw : ih;
-  const rh = ed.rot % 180 === 0 ? ih : iw;
-  if (ed.fit === 'stretch') return [W / rw, H / rh];
-  const s = ed.fit === 'fit' ? Math.min(W / rw, H / rh) : Math.max(W / rw, H / rh);
-  return [s, s];
-}
-
-function adjust(data) {
-  const b = Number($('bright').value) * 1.28;
-  const c = Number($('contrast').value);
-  const f = (259 * (c + 255)) / (255 * (259 - c));
-  if (!b && !c) return;
-  for (let i = 0; i < data.length; i += 4) {
-    for (let k = 0; k < 3; k++) data[i + k] = Math.max(0, Math.min(255, f * (data[i + k] - 128) + 128 + b));
-  }
-}
-
-const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-
-function quantize(imgData, opts) {
-  const { palette, algo, thresh, redSens } = opts;
-  const d = imgData.data;
-  const buf = new Float32Array(W * H * 3);
-  for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
-    // Composite transparency on white.
-    const a = d[i + 3] / 255;
-    buf[j] = d[i] * a + 255 * (1 - a);
-    buf[j + 1] = d[i + 1] * a + 255 * (1 - a);
-    buf[j + 2] = d[i + 2] * a + 255 * (1 - a);
-  }
-  const kernel = algo === 'fs'
-    ? [[1, 0, 7 / 16], [-1, 1, 3 / 16], [0, 1, 5 / 16], [1, 1, 1 / 16]]
-    : algo === 'atkinson'
-      ? [[1, 0, 1 / 8], [2, 0, 1 / 8], [-1, 1, 1 / 8], [0, 1, 1 / 8], [1, 1, 1 / 8], [0, 2, 1 / 8]]
-      : null;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const j = (y * W + x) * 3;
-      const r = buf[j], g = buf[j + 1], b = buf[j + 2];
-      let nr, ng, nb;
-      if (palette === 'bwr' && r > 100 && r - Math.max(g, b) > redSens) {
-        nr = 255; ng = 0; nb = 0;
-      } else {
-        let t = thresh;
-        if (algo === 'bayer') t += (BAYER4[(y & 3) * 4 + (x & 3)] / 16 - 0.5) * 128;
-        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-        nr = ng = nb = lum < t ? 0 : 255;
-      }
-      const i4 = (y * W + x) * 4;
-      d[i4] = nr; d[i4 + 1] = ng; d[i4 + 2] = nb; d[i4 + 3] = 255;
-      if (kernel) {
-        const er = r - nr, eg = g - ng, eb = b - nb;
-        for (const [dx, dy, wgt] of kernel) {
-          const xx = x + dx, yy = y + dy;
-          if (xx < 0 || xx >= W || yy >= H) continue;
-          const k = (yy * W + xx) * 3;
-          buf[k] += er * wgt; buf[k + 1] += eg * wgt; buf[k + 2] += eb * wgt;
-        }
-      }
-    }
-  }
-  return imgData;
-}
-
-function layerFont(L) {
-  return `${L.bold ? '700 ' : ''}${L.size}px ${L.font}`;
-}
-function drawLayers(ctx) {
-  for (const L of ed.layers) {
-    if (L.type === 'rect') {
-      ctx.fillStyle = L.color;
-      ctx.fillRect(L.x, L.y, L.w, L.h);
-    } else {
-      ctx.font = layerFont(L);
-      ctx.fillStyle = L.color;
-      ctx.textBaseline = 'top';
-      ctx.textAlign = L.align || 'left';
-      ctx.fillText(L.text, L.x, L.y);
-      if (L.strike) {
-        const m = ctx.measureText(L.text);
-        const x0 = L.align === 'right' ? L.x - m.width : L.align === 'center' ? L.x - m.width / 2 : L.x;
-        ctx.fillRect(x0 - 1, L.y + L.size * 0.5, m.width + 2, Math.max(1, Math.round(L.size / 12)));
-      }
-    }
-  }
-}
-function layerBox(L) {
-  if (L.type === 'rect') return { x: L.x, y: L.y, w: L.w, h: L.h };
-  layerCtx.font = layerFont(L);
-  const w = layerCtx.measureText(L.text).width;
-  const x0 = L.align === 'right' ? L.x - w : L.align === 'center' ? L.x - w / 2 : L.x;
-  return { x: x0, y: L.y, w, h: L.size };
-}
-
-/* Snap near-palette pixels of the (antialiased) layer canvas to pure colors,
- * so text stays crisp while the background photo gets dithered. */
-function quantizeLayers(imgData) {
-  const d = imgData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const a = d[i + 3];
-    if (a < 110) { d[i + 3] = 0; continue; }
-    const r = d[i], g = d[i + 1], b = d[i + 2];
-    const dist = (R, G, B) => (r - R) ** 2 + (g - G) ** 2 + (b - B) ** 2;
-    const opts = [[0, 0, 0], [255, 255, 255], [255, 0, 0]];
-    let best = opts[0], bd = Infinity;
-    for (const o of opts) { const v = dist(...o); if (v < bd) { bd = v; best = o; } }
-    if ($('palette').value === 'bw' && best[1] === 0 && best[0] === 255) best = [0, 0, 0];
-    d[i] = best[0]; d[i + 1] = best[1]; d[i + 2] = best[2]; d[i + 3] = 255;
-  }
-  return imgData;
-}
-
-let renderQueued = false;
-function render() {
-  if (renderQueued) return;
-  renderQueued = true;
-  requestAnimationFrame(() => { renderQueued = false; renderNow(); });
-}
-function renderNow() {
-  workCtx.fillStyle = '#fff';
-  workCtx.fillRect(0, 0, W, H);
-  if (ed.img) {
-    const iw = ed.img.naturalWidth || ed.img.width, ih = ed.img.naturalHeight || ed.img.height;
-    const [sx, sy] = baseScale(iw, ih);
-    workCtx.save();
-    workCtx.imageSmoothingQuality = 'high';
-    workCtx.translate(W / 2 + ed.ox, H / 2 + ed.oy);
-    workCtx.rotate(ed.rot * Math.PI / 180);
-    // Rotation is applied before scaling, so swap axes for 90/270.
-    const [ax, ay] = ed.rot % 180 === 0 ? [sx, sy] : [sy, sx];
-    workCtx.scale(ax * ed.zoom, ay * ed.zoom);
-    workCtx.drawImage(ed.img, -iw / 2, -ih / 2);
-    workCtx.restore();
-  }
-  const base = workCtx.getImageData(0, 0, W, H);
-  adjust(base.data);
-  quantize(base, {
-    palette: $('palette').value,
-    algo: $('dither').value,
-    thresh: Number($('thresh').value),
-    redSens: Number($('redSens').value),
-  });
-  outCtx.putImageData(base, 0, 0);
-
-  layerCtx.clearRect(0, 0, W, H);
-  drawLayers(layerCtx);
-  const lay = quantizeLayers(layerCtx.getImageData(0, 0, W, H));
-  layerCtx.putImageData(lay, 0, 0);
-  outCtx.drawImage(layerCanvas, 0, 0);
-}
-
-function renderLayerList() {
-  const ul = $('layers');
-  ul.textContent = '';
-  ed.layers.forEach((L, i) => {
-    const li = document.createElement('li');
-    if (i === ed.sel) li.className = 'sel';
-    const sw = document.createElement('i');
-    sw.className = 'swatch';
-    sw.style.background = L.color;
-    const span = document.createElement('span');
-    span.textContent = L.type === 'rect' ? `Khối ${L.w}×${L.h}` : `“${L.text}” · ${L.size}px`;
-    span.style.cursor = 'pointer';
-    span.onclick = () => selectLayer(i === ed.sel ? -1 : i);
-    const del = document.createElement('button');
-    del.type = 'button'; del.className = 'sm danger'; del.textContent = '×';
-    del.title = 'Xóa lớp'; del.setAttribute('aria-label', 'Xóa lớp');
-    del.onclick = () => { ed.layers.splice(i, 1); selectLayer(-1); render(); };
-    li.append(sw, span, del);
-    ul.appendChild(li);
-  });
-}
-function selectLayer(i) {
-  ed.sel = i;
-  const L = ed.layers[i];
-  $('btnUpdText').disabled = !(L && L.type === 'text');
-  if (L && L.type === 'text') {
-    $('txt').value = L.text; $('txtSize').value = L.size; $('txtColor').value = L.color;
-    $('txtBold').checked = !!L.bold; $('txtFont').value = L.font;
-  }
-  renderLayerList();
-}
-function textFromForm(x, y) {
-  return {
-    type: 'text', text: $('txt').value.trim(), x, y,
-    size: Math.max(6, Math.min(128, Number($('txtSize').value) || 20)),
-    color: $('txtColor').value, bold: $('txtBold').checked, font: $('txtFont').value, align: 'left',
-  };
-}
-
-function applyTemplate() {
-  const style = $('tplStyle').value;
-  const name = $('tplName').value.trim();
-  const price = $('tplPrice').value.trim();
-  const unit = $('tplUnit').value.trim();
-  const old = $('tplOld').value.trim();
-  const note = $('tplNote').value.trim();
-  const F = 'system-ui, Arial, sans-serif';
-  const L = [];
-  const band = style !== 'plain';
-  if (band) L.push({ type: 'rect', x: 0, y: 0, w: W, h: 30, color: style === 'red' ? '#ff0000' : '#000000' });
-  L.push({ type: 'text', text: name, x: 8, y: 6, size: 19, bold: true, font: F, color: band ? '#ffffff' : '#000000' });
-  if (!band) L.push({ type: 'rect', x: 8, y: 30, w: W - 16, h: 2, color: '#000000' });
-  // Pick the largest price size that fits next to the unit.
-  let size = 56;
-  layerCtx.font = `700 ${size}px ${F}`;
-  const unitW = () => { layerCtx.font = `700 16px ${F}`; return unit ? layerCtx.measureText(unit).width + 6 : 0; };
-  const uw = unitW();
-  while (size > 20) {
-    layerCtx.font = `700 ${size}px ${F}`;
-    if (layerCtx.measureText(price).width + uw <= W - 16) break;
-    size -= 2;
-  }
-  layerCtx.font = `700 ${size}px ${F}`;
-  const pw = layerCtx.measureText(price).width;
-  const py = 40;
-  L.push({ type: 'text', text: price, x: 8, y: py, size, bold: true, font: F, color: style === 'black' ? '#ff0000' : '#000000' });
-  if (unit) L.push({ type: 'text', text: unit, x: 8 + pw + 6, y: py + size - 20, size: 16, bold: true, font: F, color: '#000000' });
-  const by = py + size + 6;
-  if (old) L.push({ type: 'text', text: old, x: 8, y: Math.min(by, H - 34), size: 15, bold: false, font: F, color: '#ff0000', strike: true });
-  if (note) L.push({ type: 'text', text: note, x: W - 8, y: H - 17, size: 13, bold: false, font: F, color: '#000000', align: 'right' });
-  ed.layers = L;
-  selectLayer(-1);
-  render();
-}
-
-/* ---------- canvas -> device bytes ----------
- * 2.13"/2.9" firmware stores the frame column-first: columns from x = W-1
- * down to 0, 128 vertical pixels per column packed MSB-first (16 bytes/column).
- * Black plane: bit 1 = not black. Red plane: bit 0 = red, 1 = not red. */
-function planes(ctx, flip) {
-  const src = ctx.getImageData(0, 0, W, H).data;
-  const px = (x, y) => {
-    if (flip) { x = W - 1 - x; y = H - 1 - y; }
-    return (y * W + x) * 4;
-  };
-  const black = new Uint8Array(W * H / 8);
-  const red = new Uint8Array(W * H / 8);
-  let n = 0;
-  for (let x = W - 1; x >= 0; x--) {
-    for (let y = 0; y < H; y += 8) {
-      let bb = 0, rb = 0;
-      for (let k = 0; k < 8; k++) {
-        const i = px(x, y + k);
-        const r = src[i], g = src[i + 1], b = src[i + 2];
-        const isRed = r > 0 && g === 0 && b === 0;
-        const isWhite = r > 0 && g > 0 && b > 0;
-        bb = (bb << 1) | (isWhite ? 1 : 0);
-        rb = (rb << 1) | (isRed ? 0 : 1);
-      }
-      black[n] = bb; red[n] = rb; n++;
-    }
-  }
-  return { black, red };
-}
-
-async function sendPlane(data, isBlack, p0, p1) {
-  const size = state.chunk;
-  const total = Math.ceil(data.length / size);
-  for (let off = 0, part = 0; off < data.length; off += size, part++) {
-    const chunk = data.subarray(off, off + size);
-    const pkt = new Uint8Array(2 + chunk.length);
-    pkt[0] = CMD.WRITE_IMAGE;
-    pkt[1] = (off === 0 ? 0x00 : 0xf0) | (isBlack ? 0x0f : 0x00);
-    pkt.set(chunk, 2);
-    await send(pkt, true);
-    const pct = p0 + ((part + 1) / total) * (p1 - p0);
-    $('sendProgress').value = pct;
-    setStatus('sendStatus', `Đang gửi lớp ${isBlack ? 'đen' : 'đỏ'}: ${part + 1}/${total}`);
-    await sleepMs(8);
-  }
-  log(`Đã gửi lớp ${isBlack ? 'đen' : 'đỏ'}: ${data.length} byte, ${total} gói`);
-}
-
-async function uploadCanvas(ctx) {
-  if (state.modelId != null && state.modelId !== 2) {
-    throw new Error(`Thiết bị báo model ${state.modelId}, không phải màn 2.13" (model 2).`);
-  }
-  const t0 = performance.now();
-  const { black, red } = planes(ctx, $('flip180').checked);
-  $('sendProgress').value = 0;
-  setStatus('sendStatus', 'Đang khởi tạo màn hình…');
-  await send([CMD.INIT]);
-  await sleepMs(100);
-  await sendPlane(black, true, 0, 48);
-  await sendPlane(red, false, 48, 95);
-  setStatus('sendStatus', 'Đang refresh màn hình…');
-  await send([CMD.REFRESH]);
-  state.mode = 0;
-  refreshInfo();
-  $('sendProgress').value = 100;
-  const s = ((performance.now() - t0) / 1000).toFixed(1);
-  setStatus('sendStatus', `Đã gửi xong trong ${s}s. Màn e-paper cần ~15–20s để refresh 3 màu.`, 'ok');
-}
-
-/* ---------- image loading ---------- */
-function loadImageFile(file) {
-  if (!file || !file.type.startsWith('image/')) return;
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = () => {
-    ed.img = img; ed.rot = 0; ed.zoom = 1; ed.ox = 0; ed.oy = 0; ed.fit = 'fill';
-    $('zoom').value = 100; $('zoomV').textContent = '100%';
-    log(`Đã nạp ảnh ${img.naturalWidth}×${img.naturalHeight}`);
-    render();
-  };
-  img.onerror = () => log('Không đọc được ảnh.', 'log-err');
-  img.src = url;
-}
-
-/* ---------- pointer interaction on preview ---------- */
-function canvasPoint(ev) {
-  const r = out.getBoundingClientRect();
-  return { x: (ev.clientX - r.left) * W / r.width, y: (ev.clientY - r.top) * H / r.height };
-}
-let drag = null;
-out.addEventListener('pointerdown', ev => {
-  const p = canvasPoint(ev);
-  if (ed.placing) {
-    const L = textFromForm(Math.round(p.x), Math.round(p.y));
-    if (L.text) { ed.layers.push(L); selectLayer(ed.layers.length - 1); }
-    ed.placing = false; out.classList.remove('placing');
-    render();
-    return;
-  }
-  let hit = -1;
-  for (let i = ed.layers.length - 1; i >= 0; i--) {
-    const b = layerBox(ed.layers[i]);
-    // Full-width background bands shouldn't steal drags from text above them.
-    if (ed.layers[i].type === 'rect' && b.w >= W - 1) continue;
-    if (p.x >= b.x - 3 && p.x <= b.x + b.w + 3 && p.y >= b.y - 3 && p.y <= b.y + b.h + 3) { hit = i; break; }
-  }
-  if (hit >= 0) selectLayer(hit);
-  const L = ed.layers[hit];
-  drag = { p, layer: L, lx: L?.x, ly: L?.y, ox: ed.ox, oy: ed.oy };
-  if (!L && !ed.img) { drag = null; return; }
-  out.setPointerCapture(ev.pointerId);
-  out.classList.add('dragging');
-});
-out.addEventListener('pointermove', ev => {
-  if (!drag) return;
-  const p = canvasPoint(ev);
-  const dx = p.x - drag.p.x, dy = p.y - drag.p.y;
-  if (drag.layer) { drag.layer.x = Math.round(drag.lx + dx); drag.layer.y = Math.round(drag.ly + dy); }
-  else { ed.ox = drag.ox + dx; ed.oy = drag.oy + dy; }
-  render();
-});
-const endDrag = () => { drag = null; out.classList.remove('dragging'); };
-out.addEventListener('pointerup', endDrag);
-out.addEventListener('pointercancel', endDrag);
-out.addEventListener('wheel', ev => {
-  if (!ed.img) return;
-  ev.preventDefault();
-  ed.zoom = Math.max(0.1, Math.min(4, ed.zoom * (ev.deltaY < 0 ? 1.08 : 1 / 1.08)));
-  $('zoom').value = Math.round(ed.zoom * 100);
-  $('zoomV').textContent = $('zoom').value + '%';
-  render();
-}, { passive: false });
-
-/* ================================================================
- * Turn-by-turn navigation
+ * Turn-by-turn navigation (routing, GPS tracking, preview)
  * ================================================================ */
 const navOut = $('navOut');
 const navCtx = navOut.getContext('2d', { willReadFrequently: true });
 const nav = {
-  route: null, running: false, watchId: null, simTimer: null, simAlong: 0,
+  route: null, running: false, watchId: null, simTimer: null, sendTimer: null, simAlong: 0,
   lastAlong: 0, lastIdx: 0, offCount: 0, lastReroute: 0, rerouting: false,
-  lastKey: null, lastSentAt: 0, sends: 0, sending: false, info: null,
-  dest: null, wakeLock: null, arrived: false,
+  lastKey: null, lastSentAt: 0, sending: false, info: null, dest: null, wakeLock: null, arrived: false,
 };
 
 function fmtDist(m) {
@@ -1395,8 +753,8 @@ async function routeOsm(origin, dest, mode) {
   return buildRoute(r.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })), steps, r.duration);
 }
 function fetchRoute(origin) {
-  const mode = $('navMode').value;
-  return $('navProvider').value === 'google' ? routeGoogle(origin, nav.dest, mode) : routeOsm(origin, nav.dest, mode);
+  const mode = segGet('navMode') || 'TWO_WHEELER';
+  return segGet('navProvider') === 'google' ? routeGoogle(origin, nav.dest, mode) : routeOsm(origin, nav.dest, mode);
 }
 
 /* ---------- maneuver icons ---------- */
@@ -1524,7 +882,7 @@ function drawNavScreen(info) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, H);
   ctx.textBaseline = 'top';
-  const accent = $('navRed').checked ? '#ff0000' : '#000000';
+  const accent = '#000000';
   if (!info) {
     ctx.fillStyle = '#000';
     ctx.font = `700 18px ${F_SANS}`;
@@ -1562,8 +920,57 @@ function drawNavScreen(info) {
   snapToPanel(ctx);
 }
 
+
+/* ---------- image quantization (black / white / red) ---------- */
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+function quantize(imgData, opts) {
+  const { palette, algo, thresh, redSens } = opts;
+  const d = imgData.data;
+  const buf = new Float32Array(W * H * 3);
+  for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
+    // Composite transparency on white.
+    const a = d[i + 3] / 255;
+    buf[j] = d[i] * a + 255 * (1 - a);
+    buf[j + 1] = d[i + 1] * a + 255 * (1 - a);
+    buf[j + 2] = d[i + 2] * a + 255 * (1 - a);
+  }
+  const kernel = algo === 'fs'
+    ? [[1, 0, 7 / 16], [-1, 1, 3 / 16], [0, 1, 5 / 16], [1, 1, 1 / 16]]
+    : algo === 'atkinson'
+      ? [[1, 0, 1 / 8], [2, 0, 1 / 8], [-1, 1, 1 / 8], [0, 1, 1 / 8], [1, 1, 1 / 8], [0, 2, 1 / 8]]
+      : null;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const j = (y * W + x) * 3;
+      const r = buf[j], g = buf[j + 1], b = buf[j + 2];
+      let nr, ng, nb;
+      if (palette === 'bwr' && r > 100 && r - Math.max(g, b) > redSens) {
+        nr = 255; ng = 0; nb = 0;
+      } else {
+        let t = thresh;
+        if (algo === 'bayer') t += (BAYER4[(y & 3) * 4 + (x & 3)] / 16 - 0.5) * 128;
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        nr = ng = nb = lum < t ? 0 : 255;
+      }
+      const i4 = (y * W + x) * 4;
+      d[i4] = nr; d[i4 + 1] = ng; d[i4 + 2] = nb; d[i4 + 3] = 255;
+      if (kernel) {
+        const er = r - nr, eg = g - ng, eb = b - nb;
+        for (const [dx, dy, wgt] of kernel) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || xx >= W || yy >= H) continue;
+          const k = (yy * W + xx) * 3;
+          buf[k] += er * wgt; buf[k + 1] += eg * wgt; buf[k + 2] += eb * wgt;
+        }
+      }
+    }
+  }
+  return imgData;
+}
+
+
 /* ---------- guidance loop ---------- */
-const BUCKETS = [2000, 1000, 500, 300, 150, 50, 0];
 function computeInfo(along) {
   const r = nav.route;
   const remain = Math.max(0, r.total - along);
@@ -1580,21 +987,20 @@ function showInfo(info) {
   nav.info = info;
   drawNavScreen(info);
   if (!info) return;
-  $('navNow').textContent = info.arrived ? 'Đã đến nơi.' : `Sau ${fmtDist(info.dist)}: ${info.text}`;
-  $('navRemain').textContent = fmtDist(info.remain);
-  $('navEta').textContent = fmtClock(info.eta);
+  $('navNow').textContent = info.arrived ? 'Đã đến nơi' : `${fmtDist(info.dist)} · ${info.text}`;
+  $('navMeta').textContent = info.arrived ? '' : `Còn ${fmtDist(info.remain)} · đến lúc ${fmtClock(info.eta)}`;
 }
 
 const NAV_ICON_IDS = {
   straight: 0, left: 1, right: 2, 'slight-left': 3, 'slight-right': 4, 'sharp-left': 5, 'sharp-right': 6,
   'keep-left': 7, 'keep-right': 8, 'uturn-left': 9, 'uturn-right': 10, roundabout: 11, merge: 12, arrive: 13,
 };
-/* Firmware with nav=1 renders the screen itself: 40 flags icon dist(u16) remain/10(u16) eta_h eta_m text */
 // Distance as the tag shows it: coarse far away, fine close to the maneuver.
 function navDistStep(d) { return d >= 1000 ? 100 : d >= 300 ? 50 : d >= 100 ? 10 : 5; }
 // Minimum time between screen updates: the closer the maneuver, the more often (fast refresh ≈ 1.5 s).
 function navGapMs(d) { return d <= 100 ? 1500 : d <= 300 ? 3000 : d <= 1000 ? 8000 : 20000; }
 
+/* NAV packet: 40 flags icon dist(u16) remain/10(u16) eta_h eta_m text */
 function navPacket(info, flags = 0) {
   const step = navDistStep(info.dist || 0);
   const dist = Math.min(65535, Math.round((info.dist || 0) / step) * step);
@@ -1605,55 +1011,45 @@ function navPacket(info, flags = 0) {
   const pkt = new Uint8Array(9 + n);
   if (info.arrived) flags |= 0x02;
   else if (info.dist <= 400) flags |= 0x04;  // maneuver close: tag postpones its 13 s full refresh
-  pkt.set([0x40, flags, NAV_ICON_IDS[info.code] ?? 0, dist & 0xff, dist >> 8,
+  pkt.set([CMD.NAV, flags, NAV_ICON_IDS[info.code] ?? 0, dist & 0xff, dist >> 8,
     remain & 0xff, remain >> 8, info.eta.getHours(), info.eta.getMinutes()]);
   pkt.set(bytes.subarray(0, n), 9);
   return pkt;
 }
 
+// Stock firmware (no nav=1) can only show full images, each a ~15 s 3-color refresh.
+const IMAGE_BUCKETS = [2000, 1000, 500, 300, 150, 50, 0];
+
 async function maybeSend(force) {
   const info = nav.info;
-  if (!info || nav.sending || !$('navAutoSend').checked || !state.ch || state.busy) return;
+  if (!info || nav.sending || !state.ch || state.busy) return;
+  let key, flags = 0, gap;
   if (state.navFw) {
     const shown = info.arrived ? 0 : Math.round(info.dist / navDistStep(info.dist));
-    const key = info.arrived ? 'arrived' : `${info.idx}|${shown}|${info.dist <= 50}`;
+    key = info.arrived ? 'arrived' : `${info.idx}|${shown}|${info.dist <= 50}`;
     const stepChanged = !info.arrived && nav.lastKey && nav.lastKey.split('|')[0] !== String(info.idx);
-    if (!force && key === nav.lastKey) return;
-    if (!force && !stepChanged && Date.now() - nav.lastSentAt < navGapMs(info.dist)) return;
-    nav.sending = true;
-    try {
-      // Right after a turn with a long straight ahead: let the tag clear ghosting now.
-      const flags = stepChanged && info.dist > 800 ? 0x08 : 0;
-      await send(navPacket(info, flags), true);
-      nav.lastKey = key;
-      nav.lastSentAt = Date.now();
-      nav.sends++;
-      $('navSent').textContent = `${nav.sends} gói lệnh · gần nhất ${fmtClock(new Date())}`;
-    } catch (e) {
-      log('Gửi lệnh chỉ đường lỗi: ' + e.message, 'log-err');
-    } finally {
-      nav.sending = false;
-    }
-    return;
+    if (stepChanged && info.dist > 800) flags = 0x08;  // long straight ahead: clear ghosting now
+    gap = stepChanged ? 0 : navGapMs(info.dist);
+  } else {
+    key = info.arrived ? 'arrived' : `${info.idx}|${IMAGE_BUCKETS.findIndex(t => info.dist > t)}`;
+    gap = 25000;
   }
-  const bucket = info.arrived ? -1 : BUCKETS.findIndex(t => info.dist > t);
-  const key = info.arrived ? 'arrived' : `${info.idx}|${bucket}`;
   if (!force && key === nav.lastKey) return;
-  const gap = Math.max(5, Number($('navMinGap').value) || 25) * 1000;
-  if (Date.now() - nav.lastSentAt < gap) return;
+  if (!force && Date.now() - nav.lastSentAt < gap) return;
   nav.sending = true;
-  state.busy = true;
   try {
-    drawNavScreen(info);
-    await uploadCanvas(navCtx);
+    if (state.navFw) {
+      await send(navPacket(info, flags), true);
+    } else {
+      state.busy = true;
+      drawNavScreen(info);
+      await uploadCanvas(navCtx);
+    }
     nav.lastKey = key;
-    nav.lastSentAt = Date.now();
-    nav.sends++;
-    $('navSent').textContent = `${nav.sends} lần · gần nhất ${fmtClock(new Date())}`;
   } catch (e) {
-    log('Gửi màn chỉ đường lỗi: ' + e.message, 'log-err');
-    nav.lastSentAt = Date.now();
+    log('Gửi màn chỉ đường lỗi: ' + e.message, 'err');
   } finally {
+    nav.lastSentAt = Date.now();
     state.busy = false;
     nav.sending = false;
   }
@@ -1663,14 +1059,13 @@ async function reroute(from) {
   if (nav.rerouting) return;
   nav.rerouting = true;
   nav.lastReroute = Date.now();
-  setStatus('navStatus', 'Lệch tuyến — đang tìm lại đường…');
+  foot('navFoot', 'Lệch tuyến — đang tìm lại đường…');
   try {
     nav.route = await fetchRoute(from);
-    nav.lastIdx = 0; nav.offCount = 0; nav.lastAlong = 0;
-    log(`Đã tính lại tuyến: ${fmtDist(nav.route.total)}`);
-    setStatus('navStatus', 'Đã tính lại tuyến.', 'ok');
+    Object.assign(nav, { lastIdx: 0, offCount: 0, lastAlong: 0, simAlong: 0 });
+    foot('navFoot', '');
   } catch (e) {
-    setStatus('navStatus', e.message, 'err');
+    foot('navFoot', e.message, true);
   } finally {
     nav.rerouting = false;
   }
@@ -1679,10 +1074,8 @@ async function reroute(from) {
 function onPosition(p, acc) {
   if (!nav.running || !nav.route || nav.rerouting) return;
   const loc = locate(nav.route, p);
-  const limit = Math.max(40, (acc || 0) * 1.5);
-  if (loc.off > limit) {
-    nav.offCount++;
-    if (nav.offCount >= 3 && Date.now() - nav.lastReroute > 20000) reroute(p);
+  if (loc.off > Math.max(40, (acc || 0) * 1.5)) {
+    if (++nav.offCount >= 3 && Date.now() - nav.lastReroute > 20000) reroute(p);
     return;
   }
   nav.offCount = 0;
@@ -1694,17 +1087,16 @@ function onPosition(p, acc) {
   maybeSend(false);
   if (info.arrived && !nav.arrived) {
     nav.arrived = true;
-    log('Đã đến nơi.');
     setTimeout(() => stopNav(true), 1000);
   }
 }
 
 function currentPosition() {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error('Trình duyệt không hỗ trợ GPS.'));
+    if (!navigator.geolocation) return reject(new Error('Trình duyệt không cho dùng vị trí.'));
     navigator.geolocation.getCurrentPosition(
-      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }),
-      err => reject(new Error('Không lấy được vị trí GPS: ' + err.message)),
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      err => reject(new Error('Không lấy được vị trí: ' + err.message)),
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 });
   });
 }
@@ -1713,45 +1105,48 @@ async function keepAwake() {
   try { nav.wakeLock = await navigator.wakeLock?.request('screen'); } catch { /* unsupported */ }
 }
 
+function setNavButton() {
+  const b = $('btnNav');
+  b.textContent = nav.running ? 'Kết thúc' : 'Bắt đầu';
+  b.className = 'btn' + (nav.running ? ' danger' : '');
+}
+
 async function startNav() {
   const destText = $('navDest').value.trim();
-  if (!destText) { setStatus('navStatus', 'Hãy nhập điểm đến.', 'err'); $('navDest').focus(); return; }
-  store.set('navDest', destText);
-  nav.dest = parseLatLng(destText) || { address: destText };
-  $('btnNavStart').disabled = true;
-  setStatus('navStatus', 'Đang tính tuyến đường…');
-  try {
-    const originText = $('navOrigin').value.trim();
-    const origin = originText ? (parseLatLng(originText) || { address: originText }) : await currentPosition();
-    nav.route = await fetchRoute(origin);
-  } catch (e) {
-    setStatus('navStatus', e.message, 'err');
-    $('btnNavStart').disabled = false;
+  if (!destText) { foot('navFoot', 'Nhập điểm đến trước.', true); $('navDest').focus(); return; }
+  if (segGet('navProvider') === 'google' && !store.get('gkey', '')) {
+    foot('navFoot', 'Chưa có Google API key — thêm trong Cài đặt hoặc chọn OpenStreetMap.', true);
     return;
   }
-  Object.assign(nav, { running: true, lastAlong: 0, lastIdx: 0, offCount: 0, lastKey: null, lastSentAt: 0, sends: 0, arrived: false, simAlong: 0 });
+  store.set('navDest', destText);
+  nav.dest = parseLatLng(destText) || { address: destText };
+  $('btnNav').disabled = true;
+  foot('navFoot', 'Đang tìm đường…');
+  try {
+    nav.route = await fetchRoute(await currentPosition());
+  } catch (e) {
+    foot('navFoot', e.message, true);
+    $('btnNav').disabled = false;
+    return;
+  }
+  Object.assign(nav, { running: true, lastAlong: 0, lastIdx: 0, offCount: 0, lastKey: null, lastSentAt: 0, arrived: false, simAlong: 0 });
   log(`Tuyến đường: ${fmtDist(nav.route.total)}, ${nav.route.steps.length} bước, ~${Math.round(nav.route.duration / 60)} phút`);
-  setStatus('navStatus', `Đang chỉ đường · ${fmtDist(nav.route.total)} · ~${Math.round(nav.route.duration / 60)} phút`, 'ok');
-  $('btnNavStop').disabled = false;
-  $('btnNavReroute').disabled = false;
-  $('navSent').textContent = state.ch ? 'chờ lần gửi đầu' : 'chưa kết nối nhãn (chỉ xem trước)';
+  foot('navFoot', state.ch ? '' : 'Chưa kết nối nhãn — chỉ xem trước trên điện thoại.');
+  $('btnNav').disabled = false;
+  setNavButton();
   keepAwake();
   showInfo(computeInfo(0));
 
-  if ($('navSim').checked) {
-    $('navGps').textContent = 'mô phỏng';
+  if ($('simOn').checked) {
     nav.simTimer = setInterval(() => {
-      nav.simAlong += (Number($('navSimSpeed').value) || 40) / 3.6;
+      nav.simAlong += (Number($('simSpeed').value) || 40) / 3.6;
       onPosition(pointAt(nav.route, Math.min(nav.simAlong, nav.route.total)), 5);
-      maybeSend(false);
     }, 1000);
-  } else if (navigator.geolocation) {
-    nav.watchId = navigator.geolocation.watchPosition(pos => {
-      const c = pos.coords;
-      $('navGps').textContent = `±${Math.round(c.accuracy)} m · ${c.speed != null ? Math.round(c.speed * 3.6) + ' km/h' : ''}`;
-      onPosition({ lat: c.latitude, lng: c.longitude }, c.accuracy);
-    }, err => { $('navGps').textContent = 'lỗi: ' + err.message; },
-    { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+  } else {
+    nav.watchId = navigator.geolocation.watchPosition(
+      pos => onPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }, pos.coords.accuracy),
+      err => foot('navFoot', 'Vị trí: ' + err.message, true),
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
   }
   // Retry pending sends even when position updates stall.
   nav.sendTimer = setInterval(() => maybeSend(false), 1000);
@@ -1765,223 +1160,202 @@ function stopNav(arrived) {
   nav.watchId = null;
   try { nav.wakeLock?.release(); } catch { /* ignore */ }
   nav.wakeLock = null;
-  $('btnNavStart').disabled = false;
-  $('btnNavStop').disabled = true;
-  $('btnNavReroute').disabled = true;
-  setStatus('navStatus', arrived ? 'Đã đến nơi — kết thúc chỉ đường.' : 'Đã dừng chỉ đường.', arrived ? 'ok' : '');
-  if (arrived) maybeSend(true);
-  else if (state.navFw && state.ch) send([0x41, 0x00]).catch(() => {});
+  setNavButton();
+  if (arrived) {
+    maybeSend(true);
+  } else {
+    showInfo(null);
+    $('navNow').textContent = 'Sẵn sàng';
+    $('navMeta').textContent = 'Nhập điểm đến để bắt đầu.';
+    if (state.navFw && state.ch) send([CMD.NAV_CTRL, 0x00]).catch(() => {});
+  }
 }
 
-function initNav() {
-  $('navDest').value = store.get('navDest', '');
-  $('navProvider').value = store.get('navProvider', 'google');
-  $('navMode').value = store.get('navMode', 'TWO_WHEELER');
-  $('navProvider').onchange = () => store.set('navProvider', $('navProvider').value);
-  $('navMode').onchange = () => store.set('navMode', $('navMode').value);
-  const keyStatus = () => setStatus('keyStatus', store.get('gkey', '') ? 'Đã lưu key trong trình duyệt này.' : 'Chưa có key.');
-  $('btnKeySave').onclick = () => {
-    const k = $('navKey').value.trim();
-    if (!k) return;
-    store.set('gkey', k);
-    $('navKey').value = '';
-    keyStatus();
+/* ================================================================
+ * Image
+ * ================================================================ */
+const imgOut = $('imgOut');
+const imgCtx = imgOut.getContext('2d', { willReadFrequently: true });
+const img = { src: null, rot: 0 };
+
+function renderImage() {
+  imgCtx.fillStyle = '#fff';
+  imgCtx.fillRect(0, 0, W, H);
+  if (!img.src) {
+    imgCtx.fillStyle = '#8e8e93';
+    imgCtx.font = '13px -apple-system, system-ui, sans-serif';
+    imgCtx.textAlign = 'center';
+    imgCtx.fillText('Chưa chọn ảnh', W / 2, H / 2 + 4);
+    return;
+  }
+  const iw = img.src.naturalWidth, ih = img.src.naturalHeight;
+  const rw = img.rot % 180 ? ih : iw, rh = img.rot % 180 ? iw : ih;
+  const s = Math.max(W / rw, H / rh);  // cover: fill the whole panel
+  imgCtx.save();
+  imgCtx.imageSmoothingQuality = 'high';
+  imgCtx.translate(W / 2, H / 2);
+  imgCtx.rotate(img.rot * Math.PI / 180);
+  imgCtx.scale(s, s);
+  imgCtx.drawImage(img.src, -iw / 2, -ih / 2);
+  imgCtx.restore();
+  const data = imgCtx.getImageData(0, 0, W, H);
+  quantize(data, { palette: $('imgRed').checked ? 'bwr' : 'bw', algo: 'fs', thresh: 128, redSens: 80 });
+  imgCtx.putImageData(data, 0, 0);
+}
+
+function loadImage(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const el = new Image();
+  el.onload = () => {
+    img.src = el; img.rot = 0;
+    $('btnRotate').disabled = false;
+    $('btnSendImg').disabled = false;
+    renderImage();
   };
-  $('btnKeyClear').onclick = () => { store.set('gkey', ''); keyStatus(); };
-  keyStatus();
-  $('btnNavStart').onclick = startNav;
-  $('btnNavStop').onclick = () => stopNav(false);
-  $('btnNavReroute').onclick = async () => {
-    if (!nav.running) return;
-    const from = $('navSim').checked ? pointAt(nav.route, nav.simAlong) : await currentPosition().catch(e => { setStatus('navStatus', e.message, 'err'); return null; });
-    if (!from) return;
-    await reroute(from);
-    nav.simAlong = 0;
-  };
-  $('navRed').onchange = () => drawNavScreen(nav.info);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && nav.running) keepAwake();
-  });
-  drawNavScreen(null);
+  el.onerror = () => foot('imgFoot', 'Không đọc được ảnh này.', true);
+  el.src = URL.createObjectURL(file);
+}
+
+/* canvas -> panel planes: column-first from the right edge, 128 px per column.
+ * Black plane: bit 1 = not black. Red plane: bit 0 = red. */
+function planes(ctx) {
+  const src = ctx.getImageData(0, 0, W, H).data;
+  const black = new Uint8Array(W * H / 8), red = new Uint8Array(W * H / 8);
+  let n = 0;
+  for (let x = W - 1; x >= 0; x--) {
+    for (let y = 0; y < H; y += 8) {
+      let bb = 0, rb = 0;
+      for (let k = 0; k < 8; k++) {
+        const i = ((y + k) * W + x) * 4;
+        const r = src[i], g = src[i + 1], b = src[i + 2];
+        bb = (bb << 1) | (r > 0 && g > 0 && b > 0 ? 1 : 0);
+        rb = (rb << 1) | (r > 0 && g === 0 && b === 0 ? 0 : 1);
+      }
+      black[n] = bb; red[n] = rb; n++;
+    }
+  }
+  return { black, red };
+}
+
+async function sendPlane(data, isBlack, onProgress) {
+  const size = state.chunk;
+  for (let off = 0; off < data.length; off += size) {
+    const chunk = data.subarray(off, off + size);
+    const pkt = new Uint8Array(2 + chunk.length);
+    pkt[0] = CMD.WRITE_IMAGE;
+    pkt[1] = (off === 0 ? 0x00 : 0xf0) | (isBlack ? 0x0f : 0x00);
+    pkt.set(chunk, 2);
+    await send(pkt, true);
+    onProgress?.((off + chunk.length) / data.length);
+    await sleepMs(8);
+  }
+}
+
+async function uploadCanvas(ctx, onProgress) {
+  const { black, red } = planes(ctx);
+  await send([CMD.INIT]);
+  await sleepMs(100);
+  await sendPlane(black, true, p => onProgress?.(p * 0.5));
+  await sendPlane(red, false, p => onProgress?.(0.5 + p * 0.5));
+  await send([CMD.REFRESH]);
+  state.mode = 0;
+  refreshInfo();
+}
+
+async function sendImage() {
+  if (!state.ch) { toggleConnection(); return; }
+  if (state.busy) return;
+  if (nav.running) stopNav(false);
+  state.busy = true;
+  $('btnSendImg').disabled = true;
+  const bar = $('imgProgress');
+  bar.hidden = false;
+  bar.value = 0;
+  try {
+    renderImage();
+    await uploadCanvas(imgCtx, p => { bar.value = p * 100; });
+    foot('imgFoot', 'Đã gửi. Nhãn cần khoảng 15 giây để hiện ảnh 3 màu.');
+  } catch (e) {
+    foot('imgFoot', 'Gửi ảnh lỗi: ' + e.message, true);
+  } finally {
+    state.busy = false;
+    $('btnSendImg').disabled = false;
+    setTimeout(() => { bar.hidden = true; }, 1500);
+  }
 }
 
 /* ================================================================
  * Wiring
  * ================================================================ */
-function initTheme() {
-  const saved = store.get('theme', null);
-  if (saved) document.documentElement.dataset.theme = saved;
-  $('btnTheme').onclick = () => {
-    const dark = document.documentElement.dataset.theme
-      ? document.documentElement.dataset.theme === 'dark'
-      : matchMedia('(prefers-color-scheme: dark)').matches;
-    const next = dark ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    store.set('theme', next);
-  };
+const TITLES = { nav: 'Chỉ đường', screen: 'Màn hình', settings: 'Cài đặt' };
+function showTab(name) {
+  document.querySelectorAll('.tabbar button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  document.querySelectorAll('.view').forEach(v => { v.hidden = v.dataset.view !== name; });
+  $('title').textContent = TITLES[name];
+  store.set('tab', name);
+  window.scrollTo(0, 0);
 }
 
-function initTabs() {
-  const show = name => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-    document.querySelectorAll('.panel').forEach(p => { p.hidden = p.dataset.panel !== name; });
-    store.set('tab', name);
-  };
-  document.querySelectorAll('.tab').forEach(t => { t.onclick = () => show(t.dataset.tab); });
-  show(store.get('tab', 'device'));
-  return show;
-}
-
-function bindSlider(id, fmt = v => v) {
-  const el = $(id), o = $(id + 'V');
-  const upd = () => { o.textContent = fmt(el.value); };
-  el.addEventListener('input', () => { upd(); render(); });
-  upd();
+function fwSend(bytes, msg) {
+  if (!state.ch) return;
+  send(bytes).then(() => foot('fwFoot', msg || 'Đã lưu vào nhãn.')).catch(e => foot('fwFoot', e.message, true));
 }
 
 function init() {
-  initTheme();
-  const showTab = initTabs();
-  if (!navigator.bluetooth) {
-    $('noBle').hidden = false;
-    $('btnConnect').disabled = true;
-  }
+  if (!navigator.bluetooth) $('noBle').hidden = false;
+  document.querySelectorAll('.tabbar button').forEach(b => { b.onclick = () => showTab(b.dataset.tab); });
+  showTab(store.get('tab', 'nav'));
 
-  $('tzHours').value = store.get('tz', Math.round(-new Date().getTimezoneOffset() / 60));
-  $('tzHours').onchange = () => store.set('tz', tzHours());
+  $('conn').onclick = toggleConnection;
 
-  $('btnConnect').onclick = scanAndConnect;
-  $('btnReconnect').onclick = async () => {
-    if (!state.device) return;
-    try { state.device.gatt.disconnect(); } catch { /* ignore */ }
-    resetConn();
-    await sleepMs(300);
-    await connect();
+  // Navigation
+  $('navDest').value = store.get('navDest', '');
+  $('navDest').addEventListener('keydown', e => { if (e.key === 'Enter' && !nav.running) startNav(); });
+  segSet('navMode', store.get('navMode', 'TWO_WHEELER'));
+  segBind('navMode', v => store.set('navMode', v));
+  $('btnNav').onclick = () => (nav.running ? stopNav(false) : startNav());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && nav.running) keepAwake();
+  });
+  drawNavScreen(null);
+
+  // Screen
+  document.querySelectorAll('.tile').forEach(t => {
+    t.onclick = () => setMode(Number(t.dataset.mode)).catch(e => log('Lỗi: ' + e.message, 'err'));
+  });
+  $('btnPick').onclick = () => $('imgFile').click();
+  $('imgFile').onchange = e => loadImage(e.target.files[0]);
+  $('btnRotate').onclick = () => { img.rot = (img.rot + 90) % 360; renderImage(); };
+  $('imgRed').onchange = renderImage;
+  $('btnSendImg').onclick = sendImage;
+  renderImage();
+
+  // Settings: navigation
+  segSet('navProvider', store.get('navProvider', 'google'));
+  segBind('navProvider', v => store.set('navProvider', v));
+  const keyState = () => { $('gKey').placeholder = store.get('gkey', '') ? 'Đã lưu key · nhập để thay' : 'Google API key'; };
+  keyState();
+  $('btnKey').onclick = () => {
+    store.set('gkey', $('gKey').value.trim());
+    $('gKey').value = '';
+    keyState();
+    foot('keyFoot', store.get('gkey', '') ? 'Đã lưu key trong trình duyệt này.' : 'Đã xóa key.');
   };
+  $('simOn').checked = store.get('simOn', false);
+  $('simSpeed').value = store.get('simSpeed', 40);
+  $('simSpeedRow').hidden = !$('simOn').checked;
+  $('simOn').onchange = () => { store.set('simOn', $('simOn').checked); $('simSpeedRow').hidden = !$('simOn').checked; };
+  $('simSpeed').onchange = () => store.set('simSpeed', Number($('simSpeed').value) || 40);
+
+  // Settings: tag refresh (firmware with nav=1)
+  $('fwFast').onchange = () => fwSend([CMD.NAV_CTRL, 0x01, $('fwFast').checked ? 1 : 0]);
+  $('fwEvery').onchange = () => fwSend([CMD.NAV_CTRL, 0x02, Number($('fwEvery').value)]);
+  segBind('fwOffset', v => fwSend([CMD.NAV_CTRL, 0x03, Number(v)], 'Đã lưu — áp dụng ở lần cập nhật tiếp theo.'));
+  segBind('fwVariant', v => fwSend([CMD.NAV_CTRL, 0x04, Number(v)]));
   $('btnClearLog').onclick = () => { $('log').textContent = ''; };
 
-  document.querySelectorAll('.mode-btns button').forEach(b => {
-    b.onclick = () => {
-      const m = Number(b.dataset.mode);
-      if (m === 0) {
-        showTab('image');
-        log('Chế độ Ảnh sẽ tự bật sau khi gửi ảnh lên màn hình.');
-        return;
-      }
-      guarded(() => sendTimeAndMode(m), 'timeStatus');
-    };
-  });
-  $('btnSyncTime').onclick = () => guarded(() => sendTimeAndMode(state.mode), 'timeStatus');
-  $('weekStart').onchange = () => guarded(async () => {
-    const v = Number($('weekStart').value);
-    await send([CMD.WEEK_START, v]);
-    setStatus('timeStatus', `Đã gửi ngày đầu tuần: ${v ? 'Thứ 2' : 'Chủ Nhật'} (áp dụng ở lần refresh tiếp theo).`, 'ok');
-  }, 'timeStatus');
-
-  $('btnSleepRead').onclick = () => guarded(readSleep, 'sleepStatus');
-  $('btnSleepOn').onclick = () => guarded(() => writeSleep(true), 'sleepStatus');
-  $('btnSleepOff').onclick = () => guarded(() => writeSleep(false), 'sleepStatus');
-
-  $('btnActQuery').onclick = () => guarded(async () => {
-    setStatus('actStatus', 'Đang hỏi thiết bị…');
-    const r = waitFor(d => d[0] === CMD.ACTIVATE || new TextDecoder().decode(d).startsWith('activation='), 1500);
-    await send([CMD.ACTIVATE]);
-    if (!await r) setStatus('actStatus', 'Không có phản hồi — firmware mở, không cần kích hoạt.', 'ok');
-  }, 'actStatus');
-  $('btnActivate').onclick = () => guarded(async () => {
-    const raw = $('actCode').value.replace(/[^0-9a-f]/gi, '');
-    const code = raw ? parseInt(raw, 16) & 0xffff : legacyCode();
-    if (code == null || Number.isNaN(code)) throw new Error('Tên Bluetooth không kết thúc bằng 4 ký tự hex; hãy nhập mã thủ công.');
-    setStatus('actStatus', `Đang gửi mã ${code.toString(16).padStart(4, '0')}…`);
-    const r = waitFor(d => new TextDecoder().decode(d).startsWith('activation=') || d[0] === CMD.ACTIVATE, 8000);
-    await send([CMD.ACTIVATE, (code >>> 8) & 0xff, code & 0xff]);
-    if (!await r) setStatus('actStatus', 'Hết thời gian chờ phản hồi kích hoạt.', 'err');
-  }, 'actStatus');
-
-  $('btnFwApply').onclick = () => guarded(async () => {
-    const n = Math.max(1, Math.min(100, Number($('fwFullEvery').value) || 20));
-    await send([0x41, 0x01, $('fwFast').checked ? 1 : 0]);
-    await send([0x41, 0x02, n]);
-    setStatus('fwStatus', 'Đã lưu cấu hình refresh vào nhãn.', 'ok');
-  }, 'fwStatus');
-
-  $('btnFwVariant').onclick = () => guarded(async () => {
-    await send([0x41, 0x04, Number($('fwVariant').value)]);
-    setStatus('fwStatus', 'Đã lưu. Chờ phút đồng hồ tiếp theo (hoặc chạy chỉ đường) để xem kết quả.', 'ok');
-  }, 'fwStatus');
-
-  $('btnFwOffset').onclick = () => guarded(async () => {
-    await send([0x41, 0x03, Number($('fwOffset').value)]);
-    setStatus('fwStatus', 'Đã lưu. Lần cập nhật màn hình tiếp theo sẽ vẽ ở vị trí mới (bấm Đồng hồ để thử).', 'ok');
-  }, 'fwStatus');
-
-  $('btnRaw').onclick = () => guarded(async () => {
-    const h = $('rawHex').value.replace(/[^0-9a-f]/gi, '');
-    if (!h || h.length % 2) throw new Error('Chuỗi hex không hợp lệ.');
-    await send(h.match(/../g).map(x => parseInt(x, 16)));
-  });
-
-  // Image editor
-  $('file').onchange = e => loadImageFile(e.target.files[0]);
-  const drop = $('drop');
-  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); loadImageFile(e.dataTransfer.files[0]); });
-  document.addEventListener('paste', e => {
-    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
-    if (item) { loadImageFile(item.getAsFile()); showTab('image'); }
-  });
-  document.querySelectorAll('[data-fit]').forEach(b => {
-    b.onclick = () => { ed.fit = b.dataset.fit; ed.zoom = 1; ed.ox = 0; ed.oy = 0; $('zoom').value = 100; $('zoomV').textContent = '100%'; render(); };
-  });
-  $('btnRotL').onclick = () => { ed.rot = (ed.rot + 270) % 360; render(); };
-  $('btnRotR').onclick = () => { ed.rot = (ed.rot + 90) % 360; render(); };
-  $('btnCenter').onclick = () => { ed.ox = 0; ed.oy = 0; render(); };
-  $('btnRemoveImg').onclick = () => { ed.img = null; render(); };
-  $('zoom').addEventListener('input', () => { ed.zoom = Number($('zoom').value) / 100; });
-  bindSlider('zoom', v => v + '%');
-  bindSlider('bright');
-  bindSlider('contrast');
-  bindSlider('thresh');
-  bindSlider('redSens');
-  ['palette', 'dither'].forEach(id => $(id).addEventListener('change', render));
-
-  $('btnAddText').onclick = () => {
-    if (!$('txt').value.trim()) { $('txt').focus(); return; }
-    ed.placing = true; out.classList.add('placing');
-    log('Bấm vào vị trí trên hình xem trước để đặt chữ.');
-  };
-  $('btnUpdText').onclick = () => {
-    const L = ed.layers[ed.sel];
-    if (!L || L.type !== 'text') return;
-    Object.assign(L, textFromForm(L.x, L.y), { align: L.align, strike: L.strike });
-    renderLayerList(); render();
-  };
-  $('btnTemplate').onclick = applyTemplate;
-
-  $('btnSend').onclick = () => guarded(async () => {
-    renderNow();
-    await uploadCanvas(outCtx);
-  }, 'sendStatus');
-  $('btnClearScreen').onclick = () => guarded(async () => {
-    const c = document.createElement('canvas');
-    c.width = W; c.height = H;
-    const x = c.getContext('2d', { willReadFrequently: true });
-    x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
-    await uploadCanvas(x);
-  }, 'sendStatus');
-  $('btnDownload').onclick = () => {
-    renderNow();
-    const a = document.createElement('a');
-    a.download = 'aesl0213c.png';
-    a.href = out.toDataURL('image/png');
-    a.click();
-  };
-
-  applyTemplate();
-  initNav();
   refreshInfo();
-  log('Sẵn sàng. Bấm "Quét & kết nối" và chọn nhãn AESL0213C.');
+  log('Sẵn sàng.');
 }
 init();
 </script>

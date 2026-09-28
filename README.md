@@ -1,48 +1,23 @@
-# AESL0213C Controller
+# Nhãn chỉ đường AESL0213C
 
-Web điều khiển nhãn điện tử **AESL0213C** (Nordic nRF52811, e-paper 2.13" 250×128, 3 màu đen/trắng/đỏ) qua **Web Bluetooth**. Chỉ gồm một file `index.html` tĩnh, không cần server.
+Web điều khiển nhãn e-paper **AESL0213C** (Nordic nRF52811, màn 2.13" 250×128 đen/trắng/đỏ) qua Bluetooth.
+Một file `index.html`, không cần server. Mở tại **https://ngquangdat.github.io/iot/**.
 
-## Tính năng
-- Quét và kết nối BLE, đọc phiên bản firmware, model ID, panel, chế độ hiện tại
-- Chuyển chế độ **Lịch / Đồng hồ / Ảnh** và đồng bộ giờ (có múi giờ), đổi ngày đầu tuần
-- Đọc/đặt **lịch ngủ màn hình**
-- Gửi ảnh 250×128: kéo thả/dán ảnh, vừa khung/phủ kín/kéo giãn, xoay, zoom, độ sáng, tương phản,
-  dithering (Floyd–Steinberg, Atkinson, Bayer, ngưỡng), bảng màu BWR hoặc BW
-- **Mẫu nhãn giá** (tên, giá, đơn vị, giá cũ gạch ngang, dòng phụ) và lớp chữ kéo thả được
-- Kiểm tra/gửi mã kích hoạt, gửi lệnh hex thô, nhật ký
-- **Chỉ đường** (tab "Chỉ đường"): lấy tuyến từ Google Routes API (API key của bạn, lưu trong trình duyệt)
-  hoặc OpenStreetMap (miễn phí), bám GPS, tự tính lại tuyến khi đi lệch, hiển thị mũi tên + khoảng cách +
-  tên đường lên nhãn. Có chế độ mô phỏng để thử tại chỗ.
+## Chức năng
+- **Chỉ đường** – nhập điểm đến, chọn phương tiện, bấm *Bắt đầu*. Tuyến lấy từ Google Maps (Routes API, key của bạn)
+  hoặc OpenStreetMap (miễn phí). Web bám GPS, tự tính lại khi đi lệch và cập nhật nhãn dày dần khi đến gần chỗ rẽ.
+- **Màn hình** – chuyển nhãn sang *Đồng hồ* hoặc *Lịch*, hoặc gửi một ảnh (tự cắt vừa khung, chuyển sang 3 màu).
+- **Cài đặt** – nguồn bản đồ và API key, chế độ thử (giả lập di chuyển), tuỳ chỉnh cập nhật nhanh của nhãn,
+  liên kết tải firmware, nhật ký.
+- Tự đồng bộ giờ khi kết nối; giao diện sáng/tối theo hệ thống.
 
-## Firmware chỉ đường
-Thư mục [`firmware/`](firmware/README.md) chứa firmware mới cho nhãn (nạp OTA qua Bluetooth bằng nRF Connect),
-cho phép nhãn tự vẽ màn chỉ đường với refresh nhanh. Web tự nhận ra firmware này (`nav=1`).
+## Dùng trên iPhone
+Safari không có Web Bluetooth — mở trang bằng ứng dụng **Bluefy** và cho phép vị trí. Khi chỉ đường, giữ trang mở
+trên màn hình (iOS tạm dừng web chạy nền). Android/máy tính: Chrome hoặc Edge.
 
-## Chỉ đường trên iPhone
-Safari không hỗ trợ Web Bluetooth, hãy mở trang bằng ứng dụng **Bluefy** và cho phép quyền vị trí. Trang phải
-luôn mở ở màn hình chính (iOS tạm dừng web khi chạy nền). Với firmware hiện tại mỗi lần cập nhật nhãn là một lần
-refresh 3 màu (~15–20 s), nên web chỉ gửi khi sang hướng rẽ mới hoặc khi vượt các mốc khoảng cách.
+Google API key: bật **Routes API**, giới hạn key theo website `https://ngquangdat.github.io/*`. Key chỉ lưu trong trình duyệt.
 
-Google API key: bật **Routes API**, giới hạn key theo website `https://ngquangdat.github.io/*` và theo API.
-
-## Chạy
-Web Bluetooth cần HTTPS (hoặc `localhost`) và Chrome/Edge (desktop, Android). Trên iOS dùng Bluefy.
-
-- **GitHub Pages**: Settings → Pages → Deploy from branch → chọn nhánh và thư mục `/ (root)`.
-- **Cục bộ**: `python3 -m http.server 8000` rồi mở `http://localhost:8000`.
-
-## Giao thức
-Service `62750001-d828-918d-fb46-b6c11c675aec`, characteristic lệnh/notify `62750002-…`, phiên bản firmware `62750003-…`.
-
-| Lệnh | Ý nghĩa |
-|---|---|
-| `01` | Khởi tạo màn hình |
-| `05` | Refresh |
-| `20 tttttttt zz mm` | Đặt giờ (unix big-endian), múi giờ (giờ), chế độ 0 ảnh · 1 lịch · 2 đồng hồ |
-| `21 ww` | Ngày đầu tuần: 0 Chủ Nhật · 1 Thứ 2 |
-| `30 pp data…` | Ghi ảnh. `pp` = (`00` gói đầu / `f0` gói tiếp) OR (`0f` lớp đen / `00` lớp đỏ) |
-| `fb ff` / `fb e sh sm eh em` | Đọc / đặt lịch ngủ |
-| `a0` / `a0 cc cc` | Truy vấn / gửi mã kích hoạt |
-
-Dữ liệu ảnh mỗi lớp 4000 byte, sắp xếp theo cột từ x = 249 về 0, mỗi cột 128 điểm (16 byte, MSB trước).
-Lớp đen: bit 1 = không đen. Lớp đỏ: bit 0 = đỏ. Kích thước gói mặc định 128 byte, tự chỉnh khi firmware báo `mtu=`.
+## Firmware
+Thư mục [`firmware/`](firmware/README.md) chứa firmware cho nhãn (nạp OTA qua Bluetooth bằng *nRF Device Firmware Update*):
+nhãn tự vẽ màn chỉ đường với cập nhật nhanh ~1,5 giây. Với firmware gốc, web vẫn chạy nhưng mỗi lần cập nhật là
+một lần refresh 3 màu (~15 giây).
