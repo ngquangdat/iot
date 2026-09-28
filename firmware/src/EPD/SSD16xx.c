@@ -140,19 +140,36 @@ static const uint8_t lut_fast_bw[159] = {
     0x22, 0x17, 0x41, 0x00, 0x32, 0x36,                    // EOPT, VGH, VSH1, VSH2, VSL, VCOM
 };
 
-// Partial refresh: the BW RAM holds the new frame, the RED RAM the frame
-// currently on screen; Display Mode 2 drives only pixels that change.
-void SSD1680_RefreshPartial(epd_model_t* epd) {
+static void SSD1680_LoadFastLut(void) {
     EPD_WriteCmd(SSD16xx_WRITE_LUT);
     EPD_WriteData((uint8_t*)lut_fast_bw, 153);
     EPD_Write(0x3F, lut_fast_bw[153]);
     EPD_Write(SSD16xx_GDV_CTRL, lut_fast_bw[154]);
     EPD_Write(SSD16xx_SDV_CTRL, lut_fast_bw[155], lut_fast_bw[156], lut_fast_bw[157]);
     EPD_Write(SSD16xx_VCOM_VOLTAGE, lut_fast_bw[158]);
+}
+
+// Partial refresh: the BW RAM holds the new frame, the RED RAM the frame
+// currently on screen, so only changing pixels are driven.
+//   0: host LUT, Display Mode 2 in one update sequence
+//   1: host LUT, Waveshare 2.13 V3 sequence (analog on first, ping-pong option)
+//   2: the panel's own OTP Display Mode 2 waveform
+void SSD1680_RefreshPartial(epd_model_t* epd, uint8_t variant) {
     EPD_Write(SSD16xx_BORDER_CTRL, 0x80);
     EPD_Write(SSD16xx_DISP_CTRL1, 0x00, 0x00);  // both RAMs as-is
-    SSD16xx_Update(0xCF);                        // clock+analog on, Display Mode 2, off afterwards
-    SSD16xx_WaitBusy(5000);
+    if (variant == 1) {
+        SSD1680_LoadFastLut();
+        EPD_Write(SSD16xx_OTP_SELECTION_CTRL, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00);
+        SSD16xx_Update(0xC0);
+        SSD16xx_WaitBusy(1000);
+        SSD16xx_Update(0x0F);
+    } else if (variant == 2) {
+        SSD16xx_Update(0xFF);
+    } else {
+        SSD1680_LoadFastLut();
+        SSD16xx_Update(0xCF);
+    }
+    SSD16xx_WaitBusy(UINT16_MAX);
     SSD16xx_SetWindow(epd);
 }
 

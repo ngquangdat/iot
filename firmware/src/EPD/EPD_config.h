@@ -23,6 +23,7 @@ typedef struct {
     uint8_t fast_refresh;  // 0: always full refresh, otherwise partial updates for clock/nav
     uint8_t full_every;    // full refresh after this many partial updates
     uint8_t x_offset;      // RAM column offset in bytes (the glass starts at source 8*x_offset)
+    uint8_t fast_variant;  // fast refresh method, see SSD1680_RefreshPartial (0xFF = 0)
 } epd_config_t;
 
 #define CFG_MAGIC 0xA5

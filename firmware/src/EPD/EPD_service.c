@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "app_scheduler.h"
+#include "app_timer.h"
 #include "ble_srv_common.h"
 #include "main.h"
 #include "nrf_delay.h"
@@ -56,7 +57,18 @@ static void render(screen_t scr, const nav_data_t* nav, uint32_t ts, uint16_t mv
         gui_draw_clock(ts, mv, temp);
 }
 
+// Report each screen update to the phone ("upd=fast 480ms"), which makes refresh issues visible in the web log.
+static void report_update(ble_epd_t* p_epd, bool full, const char* why, uint32_t start_ticks) {
+    uint32_t ticks = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_ticks);
+    uint32_t ms = ticks * 1000 / APP_TIMER_CLOCK_FREQ * (APP_TIMER_CONFIG_RTC_FREQUENCY + 1);
+    char buf[40];
+    snprintf(buf, sizeof(buf), "upd=%s %lums %s", full ? "full" : "fast", (unsigned long)ms, why);
+    NRF_LOG_INFO("%s", buf);
+    ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
+}
+
 static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav, uint32_t ts, bool force_full) {
+    uint32_t start_ticks = app_timer_cnt_get();
     EPD_GPIO_Init();
     epd_model_t* epd = epd_init((epd_model_id_t)p_epd->config.model_id);
     uint16_t mv = m_shown.mv;
@@ -67,8 +79,12 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
     }
 
     uint8_t full_every = p_epd->config.full_every;
-    bool full = force_full || p_epd->config.fast_refresh == 0 || m_shown.screen != scr ||
-                m_shown.partials >= full_every;
+    const char* why = force_full                      ? "forced"
+                      : p_epd->config.fast_refresh == 0 ? "fast-off"
+                      : m_shown.screen != scr           ? "new-screen"
+                      : m_shown.partials >= full_every  ? "periodic"
+                                                        : "";
+    bool full = why[0] != 0;
     if (full) {
         render(scr, nav, ts, mv, temp);
         SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
@@ -80,7 +96,7 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
         SSD1680_WritePlane(epd, false, gui_buffer(), GUI_BUF_SIZE);
         render(scr, nav, ts, mv, temp);
         SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
-        SSD1680_RefreshPartial(epd);
+        SSD1680_RefreshPartial(epd, p_epd->config.fast_variant == 0xFF ? 0 : p_epd->config.fast_variant);
         m_shown.partials++;
     }
     m_shown.screen = scr;
@@ -93,6 +109,7 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
     nrf_delay_ms(200);  // for sleep
     EPD_GPIO_Uninit();
     app_feed_wdt();
+    report_update(p_epd, full, why, start_ticks);
 }
 
 static void epd_gui_update(void* p_event_data, uint16_t event_size) {
@@ -195,8 +212,11 @@ static void epd_send_time(ble_epd_t* p_epd) {
 }
 
 static void epd_send_mtu(ble_epd_t* p_epd) {
-    char buf[20] = {0};
+    char buf[40] = {0};
     snprintf(buf, sizeof(buf), "mtu=%d nav=1", p_epd->max_data_len);
+    ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
+    snprintf(buf, sizeof(buf), "cfg fast=%d every=%d off=%d var=%d", p_epd->config.fast_refresh,
+             p_epd->config.full_every, p_epd->config.x_offset, p_epd->config.fast_variant);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
 }
 
@@ -307,6 +327,9 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                     p_epd->config.fast_refresh = p_data[2];
                 else
                     p_epd->config.full_every = p_data[2] ? p_data[2] : 1;
+                epd_config_write(&p_epd->config);
+            } else if (length > 2 && p_data[1] == 0x04 && p_data[2] <= 2) {
+                p_epd->config.fast_variant = p_data[2];
                 epd_config_write(&p_epd->config);
             } else if (length > 2 && p_data[1] == 0x03 && p_data[2] <= 6) {
                 p_epd->config.x_offset = p_data[2];

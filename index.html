@@ -469,6 +469,18 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
             </div>
             <button id="btnFwOffset" type="button">Áp dụng</button>
           </div>
+          <div class="row" style="margin-top:10px">
+            <div class="field">
+              <label for="fwVariant">Cách refresh nhanh (thử lần lượt nếu màn vẫn nháy cả màn)</label>
+              <select id="fwVariant">
+                <option value="0">A – dạng sóng nạp từ firmware</option>
+                <option value="1">B – trình tự Waveshare</option>
+                <option value="2">C – dạng sóng có sẵn trong màn</option>
+              </select>
+            </div>
+            <button id="btnFwVariant" type="button">Áp dụng</button>
+          </div>
+          <p class="hint">Mỗi lần màn cập nhật, nhật ký hiện <code>upd=fast …ms</code> (refresh nhanh) hoặc <code>upd=full …ms lý do</code>.</p>
           <div id="fwStatus" class="status" role="status"></div>
         </div>
 
@@ -490,7 +502,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
               <dt>fb e sh sm eh em</dt><dd>Đặt lịch ngủ</dd>
               <dt>a0 [cc cc]</dt><dd>Truy vấn / gửi mã kích hoạt</dd>
               <dt>40 …</dt><dd>Firmware mới: màn chỉ đường (cờ, icon, khoảng cách, còn lại, giờ đến, chữ)</dd>
-              <dt>41 00 / 41 01 xx / 41 02 nn / 41 03 oo</dt><dd>Firmware mới: dừng chỉ đường / bật-tắt refresh nhanh / số lần giữa 2 lần refresh toàn màn / căn dọc hình (byte)</dd>
+              <dt>41 00 / 41 01 xx / 41 02 nn / 41 03 oo / 41 04 vv</dt><dd>Firmware mới: dừng chỉ đường / bật-tắt refresh nhanh / số lần giữa 2 lần refresh toàn màn / căn dọc hình (byte) / cách refresh nhanh (0–2)</dd>
               <dt>00 mosi sclk cs dc rst busy bs</dt><dd>Đặt chân màn hình (nếu màn không hiện sau khi nạp firmware)</dd>
             </dl>
           </details>
@@ -663,6 +675,13 @@ function onNotify(ev) {
     if (state.navFw) log('Firmware hỗ trợ lệnh chỉ đường trực tiếp (refresh nhanh).', 'log-rx');
     refreshInfo();
     return;
+  }
+  const cfgMatch = text.match(/^cfg fast=(\d+) every=(\d+) off=(\d+)(?: var=(\d+))?/);
+  if (cfgMatch) {
+    $('fwFast').checked = cfgMatch[1] !== '0';
+    $('fwFullEvery').value = cfgMatch[2];
+    if (Number(cfgMatch[3]) <= 2) $('fwOffset').value = cfgMatch[3];
+    if (cfgMatch[4] != null) $('fwVariant').value = Number(cfgMatch[4]) <= 2 ? cfgMatch[4] : '0';
   }
   if (text.startsWith('activation=')) {
     const ok = text.startsWith('activation=ok');
@@ -1873,6 +1892,11 @@ function init() {
     await send([0x41, 0x01, $('fwFast').checked ? 1 : 0]);
     await send([0x41, 0x02, n]);
     setStatus('fwStatus', 'Đã lưu cấu hình refresh vào nhãn.', 'ok');
+  }, 'fwStatus');
+
+  $('btnFwVariant').onclick = () => guarded(async () => {
+    await send([0x41, 0x04, Number($('fwVariant').value)]);
+    setStatus('fwStatus', 'Đã lưu. Chờ phút đồng hồ tiếp theo (hoặc chạy chỉ đường) để xem kết quả.', 'ok');
   }, 'fwStatus');
 
   $('btnFwOffset').onclick = () => guarded(async () => {

@@ -48,6 +48,7 @@ make ota                     # cần nrfutil 6.x: pip install --ignore-requires-
 | `41 00` | dừng chỉ đường, quay lại đồng hồ/lịch |
 | `41 01 xx` | refresh nhanh bật (`01`) / tắt (`00`) |
 | `41 02 nn` | refresh toàn màn sau `nn` lần refresh nhanh |
+| `41 04 vv` | cách refresh nhanh: 0 LUT từ firmware, 1 trình tự Waveshare, 2 LUT OTP mode 2 của màn |
 | `41 03 oo` | căn dọc: cột RAM bắt đầu ở byte `oo` (mặc định 1 = source 8, khớp kính AESL0213C) |
 
 Icon: 0 thẳng, 1 trái, 2 phải, 3 chếch trái, 4 chếch phải, 5 gắt trái, 6 gắt phải, 7 nhánh trái,

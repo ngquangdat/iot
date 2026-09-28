@@ -99,15 +99,11 @@ void EPD_GPIO_Init(void) {
     digitalWrite(EPD_DC_PIN, LOW);
     digitalWrite(EPD_RST_PIN, HIGH);
 
-    if (EPD_LED_PIN != 0xFF) pinMode(EPD_LED_PIN, OUTPUT);
-
-    EPD_LED_ON();
+    // LED stays off during screen updates (it only blinks on boot/wakeup).
 }
 
 void EPD_GPIO_Uninit(void) {
     if (--m_driver_refs > 0) return;
-
-    EPD_LED_OFF();
 
     nrf_drv_spi_uninit(&spi);
 
@@ -200,14 +196,9 @@ void EPD_Reset(bool status, uint16_t duration) {
 bool EPD_ReadBusy(void) { return digitalRead(EPD_BUSY_PIN); }
 
 void EPD_WaitBusy(bool status, uint16_t timeout) {
-    uint32_t led_status = digitalRead(EPD_LED_PIN);
-
     EPD_DEBUG("check busy");
     while (EPD_ReadBusy() == status) {
-        if (timeout % 100 == 0) {
-            app_feed_wdt();
-            EPD_LED_Toggle();
-        }
+        if (timeout % 100 == 0) app_feed_wdt();
         delay(1);
         timeout--;
         if (timeout == 0) {
@@ -216,12 +207,6 @@ void EPD_WaitBusy(bool status, uint16_t timeout) {
         }
     }
     EPD_DEBUG("busy release");
-
-    // restore led status
-    if (led_status == LOW)
-        EPD_LED_ON();
-    else
-        EPD_LED_OFF();
 }
 
 // lED

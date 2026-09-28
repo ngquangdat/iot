@@ -212,7 +212,7 @@ epd_model_t* epd_init(epd_model_id_t id);
 // SSD1680 helpers for the on-device screens
 void SSD1680_WritePlane(epd_model_t* epd, bool bw_ram, const uint8_t* data, uint16_t len);
 void SSD1680_FillPlane(epd_model_t* epd, bool bw_ram, uint8_t value);
-void SSD1680_RefreshPartial(epd_model_t* epd);
+void SSD1680_RefreshPartial(epd_model_t* epd, uint8_t variant);
 void SSD1680_SetXOffset(uint8_t bytes);
 
 #endif
