@@ -28,7 +28,10 @@ typedef enum {
     NAV_ARRIVE,
 } nav_icon_t;
 
-#define NAV_FLAG_ARRIVED 0x02
+#define NAV_FLAG_FORCE 0x01    // full refresh now
+#define NAV_FLAG_ARRIVED 0x02  // destination reached
+#define NAV_FLAG_URGENT 0x04   // maneuver is close: don't spend 13 s on a periodic full refresh now
+#define NAV_FLAG_CLEANUP 0x08  // long straight ahead: good moment for a ghost-clearing full refresh
 #define NAV_TEXT_MAX 160
 
 typedef struct {

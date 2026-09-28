@@ -435,7 +435,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
           <div class="row" style="margin-top:10px">
             <div class="field"><label for="navMinGap">Khoảng cách tối thiểu giữa 2 lần gửi (giây)</label><input id="navMinGap" type="number" min="5" max="300" value="25" style="width:120px"></div>
           </div>
-          <p class="hint">Với firmware gốc, mỗi lần gửi là một lần refresh 3 màu (~15–20 giây), nên web chỉ gửi khi sang hướng rẽ mới hoặc khi vượt các mốc 2 km, 1 km, 500 m, 300 m, 150 m, 50 m. Với firmware AESL0213C mới (có <code>nav=1</code>), web chỉ gửi lệnh nhỏ và nhãn tự vẽ, cập nhật mỗi vài giây.</p>
+          <p class="hint">Với firmware gốc, mỗi lần gửi là một lần refresh 3 màu (~15–20 giây), nên web chỉ gửi khi sang hướng rẽ mới hoặc khi vượt các mốc 2 km, 1 km, 500 m, 300 m, 150 m, 50 m. Với firmware AESL0213C mới (có <code>nav=1</code>), web chỉ gửi lệnh nhỏ và nhãn tự vẽ: xa chỗ rẽ cập nhật thưa (20 giây), càng gần càng dày (dưới 100 m: ~1,5 giây), dưới 50 m đảo màu nền để dễ nhìn.</p>
         </div>
       </section>
 
@@ -1590,14 +1590,22 @@ const NAV_ICON_IDS = {
   'keep-left': 7, 'keep-right': 8, 'uturn-left': 9, 'uturn-right': 10, roundabout: 11, merge: 12, arrive: 13,
 };
 /* Firmware with nav=1 renders the screen itself: 40 flags icon dist(u16) remain/10(u16) eta_h eta_m text */
-function navPacket(info) {
-  const dist = Math.min(65535, Math.round(info.dist || 0));
+// Distance as the tag shows it: coarse far away, fine close to the maneuver.
+function navDistStep(d) { return d >= 1000 ? 100 : d >= 300 ? 50 : d >= 100 ? 10 : 5; }
+// Minimum time between screen updates: the closer the maneuver, the more often (fast refresh ≈ 1.5 s).
+function navGapMs(d) { return d <= 100 ? 1500 : d <= 300 ? 3000 : d <= 1000 ? 8000 : 20000; }
+
+function navPacket(info, flags = 0) {
+  const step = navDistStep(info.dist || 0);
+  const dist = Math.min(65535, Math.round((info.dist || 0) / step) * step);
   const remain = Math.min(65535, Math.round((info.remain || 0) / 10));
   const bytes = new TextEncoder().encode((info.text || '').normalize('NFC'));
   let n = Math.min(bytes.length, 160);
   while (n > 0 && n < bytes.length && (bytes[n] & 0xc0) === 0x80) n--;
   const pkt = new Uint8Array(9 + n);
-  pkt.set([0x40, info.arrived ? 0x02 : 0x00, NAV_ICON_IDS[info.code] ?? 0, dist & 0xff, dist >> 8,
+  if (info.arrived) flags |= 0x02;
+  else if (info.dist <= 400) flags |= 0x04;  // maneuver close: tag postpones its 13 s full refresh
+  pkt.set([0x40, flags, NAV_ICON_IDS[info.code] ?? 0, dist & 0xff, dist >> 8,
     remain & 0xff, remain >> 8, info.eta.getHours(), info.eta.getMinutes()]);
   pkt.set(bytes.subarray(0, n), 9);
   return pkt;
@@ -1607,13 +1615,16 @@ async function maybeSend(force) {
   const info = nav.info;
   if (!info || nav.sending || !$('navAutoSend').checked || !state.ch || state.busy) return;
   if (state.navFw) {
-    const key = info.arrived ? 'arrived' : `${info.idx}|${Math.round(info.dist / 10)}`;
+    const shown = info.arrived ? 0 : Math.round(info.dist / navDistStep(info.dist));
+    const key = info.arrived ? 'arrived' : `${info.idx}|${shown}|${info.dist <= 50}`;
     const stepChanged = !info.arrived && nav.lastKey && nav.lastKey.split('|')[0] !== String(info.idx);
     if (!force && key === nav.lastKey) return;
-    if (!force && !stepChanged && Date.now() - nav.lastSentAt < 3000) return;
+    if (!force && !stepChanged && Date.now() - nav.lastSentAt < navGapMs(info.dist)) return;
     nav.sending = true;
     try {
-      await send(navPacket(info), true);
+      // Right after a turn with a long straight ahead: let the tag clear ghosting now.
+      const flags = stepChanged && info.dist > 800 ? 0x08 : 0;
+      await send(navPacket(info, flags), true);
       nav.lastKey = key;
       nav.lastSentAt = Date.now();
       nav.sends++;
@@ -1743,7 +1754,7 @@ async function startNav() {
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
   }
   // Retry pending sends even when position updates stall.
-  nav.sendTimer = setInterval(() => maybeSend(false), 3000);
+  nav.sendTimer = setInterval(() => maybeSend(false), 1000);
 }
 
 function stopNav(arrived) {

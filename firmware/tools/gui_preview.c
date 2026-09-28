@@ -32,6 +32,10 @@ int main(void) {
     nav("build/nav_long.pbm", NAV_ROUNDABOUT, 1250,
         "Vào vòng xuyến, ra lối thứ 2 vào Đại lộ Nguyễn Văn Linh rồi đi tiếp thẳng về phía Quận 7", 0);
     nav("build/nav_arrive.pbm", NAV_ARRIVE, 0, "", NAV_FLAG_ARRIVED);
+    nav("build/nav_400.pbm", NAV_LEFT, 400, "Rẽ trái vào Nguyễn Trãi", 0);
+    nav("build/nav_150.pbm", NAV_LEFT, 150, "Rẽ trái vào Nguyễn Trãi", 0);
+    nav("build/nav_40.pbm", NAV_LEFT, 40, "Rẽ trái vào Nguyễn Trãi", 0);
+    nav("build/nav_10.pbm", NAV_LEFT, 10, "Rẽ trái vào Nguyễn Trãi", 0);
     for (int i = 0; i <= NAV_ARRIVE; i++) {
         char p[40];
         snprintf(p, sizeof p, "build/icon_%02d.pbm", i);

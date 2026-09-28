@@ -17,9 +17,15 @@ typedef struct {
 
 /* ---------- raster primitives (black on white) ---------- */
 
+static bool m_ink_white;  // draw white on black (inverted panel) instead of black on white
+
 static void px(int x, int y) {
     if ((unsigned)x >= GUI_W || (unsigned)y >= GUI_H) return;
-    fb[(GUI_W - 1 - x) * (GUI_H / 8) + (y >> 3)] &= ~(0x80 >> (y & 7));
+    uint8_t* b = &fb[(GUI_W - 1 - x) * (GUI_H / 8) + (y >> 3)];
+    if (m_ink_white)
+        *b |= 0x80 >> (y & 7);
+    else
+        *b &= ~(0x80 >> (y & 7));
 }
 
 static void hline(int x0, int x1, int y) {
@@ -366,13 +372,34 @@ void gui_draw_nav(const nav_data_t* nav) {
         draw_text(&font_text, 112, 58, arrived, sizeof(arrived) - 1);
         return;
     }
-    draw_icon(nav->icon, 50, 46, 76);
+    // Approaching the maneuver: an approach bar over the last 500 m, and the whole
+    // left panel inverted for the last 50 m so the turn stands out at a glance.
+    bool imminent = nav->dist_m <= 50;
+    if (imminent) {
+        fill_rect(0, 0, 104, GUI_H);
+        m_ink_white = true;
+    }
+    draw_icon(nav->icon, 50, 44, 72);
 
-    fmt_dist(buf, nav->dist_m);
-    if (text_width(&font_big, buf, strlen(buf)) <= 98)
-        draw_text_center(&font_big, 50, 116, buf);
-    else
-        draw_text_center(&font_text, 50, 114, buf);
+    if (nav->dist_m <= 500) {
+        int filled = 84 * (500 - nav->dist_m) / 500;
+        fill_rect(8, 86, 84, 1);
+        fill_rect(8, 90, 84, 1);
+        fill_rect(8, 86, 1, 5);
+        fill_rect(91, 86, 1, 5);
+        fill_rect(8, 87, filled, 3);
+    }
+
+    if (nav->dist_m < 20) {
+        draw_text_center(&font_big, 50, 118, "Ngay!");
+    } else {
+        fmt_dist(buf, nav->dist_m);
+        if (text_width(&font_big, buf, strlen(buf)) <= 98)
+            draw_text_center(&font_big, 50, 118, buf);
+        else
+            draw_text_center(&font_text, 50, 116, buf);
+    }
+    m_ink_white = false;
 
     fill_rect(102, 4, 2, 116);
     draw_wrapped(&font_text, 110, 17, 19, 136, 4, nav->text, nav->text_len);

@@ -29,7 +29,7 @@ FONTS = [
     # name, ttf, pixel size, characters
     ("font_text", "DejaVuSans-Bold.ttf", 15, TEXT_CHARS),
     ("font_small", "DejaVuSans.ttf", 12, TEXT_CHARS),
-    ("font_big", "DejaVuSans-Bold.ttf", 28, "0123456789 .,:kmh"),
+    ("font_big", "DejaVuSans-Bold.ttf", 28, "0123456789 .,:kmhNgay!"),
     ("font_huge", "DejaVuSans-Bold.ttf", 54, "0123456789:"),
 ]
 

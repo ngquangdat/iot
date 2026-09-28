@@ -16,6 +16,11 @@ cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×
   cùng cách đặt cờ (`0x0f` lớp đen, `0xf0` gói tiếp theo), đồng bộ giờ `0x20`, lịch/đồng hồ.
 - Vẫn có **nạp qua Bluetooth không cần nút** (Secure DFU) để cập nhật lần sau.
 
+## Hiển thị khi đến gần chỗ rẽ
+- 500 m cuối: thanh tiến trình dưới mũi tên; dưới 50 m: nửa trái đảo màu (chữ trắng nền đen); dưới 20 m: "Ngay!".
+- Web gửi thưa khi còn xa (20 s, làm tròn 100 m), dày dần khi gần (dưới 100 m: ~1,5 s, làm tròn 5 m).
+- Refresh toàn màn định kỳ (~13 s, để xoá bóng mờ) được hoãn trong 400 m cuối và làm sớm sau khi rẽ nếu phía trước là đoạn thẳng dài.
+
 ## Nạp bằng iPhone (OTA)
 1. Tải `release/aesl0213c-nav-ota.zip` về iPhone (mở file trên GitHub → *Download*, lưu vào **Tệp**).
 2. **Trước khi nạp**: mở web bằng Bluefy, kết nối nhãn, chép lại dòng **Chân (pin)** (để khôi phục nếu cần).
@@ -44,7 +49,7 @@ make ota                     # cần nrfutil 6.x: pip install --ignore-requires-
 ## Giao thức chỉ đường
 | Lệnh | Nội dung |
 |---|---|
-| `40 ff ii dd dd rr rr hh mm text…` | cờ (`01` ép refresh toàn màn, `02` đã đến), icon, khoảng cách (m, LE), còn lại (×10 m, LE), giờ:phút đến, chữ UTF-8 ≤160 byte |
+| `40 ff ii dd dd rr rr hh mm text…` | cờ (`01` ép refresh toàn màn, `02` đã đến, `04` sắp rẽ – hoãn refresh toàn màn định kỳ, `08` đường thẳng dài – nên dọn bóng mờ ngay), icon, khoảng cách (m, LE), còn lại (×10 m, LE), giờ:phút đến, chữ UTF-8 ≤160 byte |
 | `41 00` | dừng chỉ đường, quay lại đồng hồ/lịch |
 | `41 01 xx` | refresh nhanh bật (`01`) / tắt (`00`) |
 | `41 02 nn` | refresh toàn màn sau `nn` lần refresh nhanh |

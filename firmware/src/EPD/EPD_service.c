@@ -79,11 +79,16 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
     }
 
     uint8_t full_every = p_epd->settings.full_every;
-    const char* why = force_full                      ? "forced"
+    // Periodic ghost-clearing full refreshes take ~13 s, so navigation defers them while a
+    // maneuver is close and takes them early on a long straight.
+    uint8_t flags = scr == SCR_NAV && nav ? nav->flags : 0;
+    const char* why = force_full                        ? "forced"
                       : p_epd->settings.fast_refresh == 0 ? "fast-off"
-                      : m_shown.screen != scr           ? "new-screen"
-                      : m_shown.partials >= full_every  ? "periodic"
-                                                        : "";
+                      : m_shown.screen != scr             ? "new-screen"
+                      : (flags & NAV_FLAG_CLEANUP) && m_shown.partials >= full_every / 2 ? "cleanup"
+                      : m_shown.partials >= full_every && !(flags & NAV_FLAG_URGENT)       ? "periodic"
+                      : m_shown.partials >= 60                                             ? "overdue"
+                                                                                           : "";
     bool full = why[0] != 0;
     if (full) {
         render(scr, nav, ts, mv, temp);
@@ -97,7 +102,7 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
         render(scr, nav, ts, mv, temp);
         SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
         SSD1680_RefreshPartial(epd, p_epd->settings.fast_variant);
-        m_shown.partials++;
+        if (m_shown.partials < 255) m_shown.partials++;
     }
     m_shown.screen = scr;
     if (nav) m_shown.nav = *nav;
@@ -153,7 +158,7 @@ static void epd_nav_receive(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length) 
     m_nav_pending.eta_m = p_data[8];
     m_nav_pending.text_len = MIN(length - 9, NAV_TEXT_MAX);
     memcpy(m_nav_pending.text, &p_data[9], m_nav_pending.text_len);
-    if (p_data[1] & 0x01) m_nav_force = true;
+    if (p_data[1] & NAV_FLAG_FORCE) m_nav_force = true;
     m_nav_active = true;
     schedule = !m_nav_sched;
     m_nav_sched = true;
