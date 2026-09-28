@@ -1,0 +1,1262 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AESL0213C Controller</title>
+<meta name="description" content="Điều khiển nhãn điện tử AESL0213C (Nordic nRF52811, e-paper 2.13&quot; 250×128) qua Web Bluetooth.">
+<style>
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --border: #dde1e7;
+  --text: #1b1f24;
+  --muted: #5f6b7a;
+  --accent: #1f6feb;
+  --accent-text: #ffffff;
+  --danger: #c62828;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --epd-red: #d32f2f;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216;
+    --surface: #171b21;
+    --surface-2: #1f242c;
+    --border: #2d333c;
+    --text: #e6e9ee;
+    --muted: #97a1ae;
+    --accent: #4c8dff;
+    --accent-text: #0b0f14;
+    --danger: #ff6b6b;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216;
+  --surface: #171b21;
+  --surface-2: #1f242c;
+  --border: #2d333c;
+  --text: #e6e9ee;
+  --muted: #97a1ae;
+  --accent: #4c8dff;
+  --accent-text: #0b0f14;
+  --danger: #ff6b6b;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --shadow: none;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 16px; }
+header.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
+  justify-content: space-between; margin-bottom: 16px;
+}
+.brand h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.conn { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px; font-size: 13px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+  white-space: nowrap;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.on .dot { background: var(--ok); }
+.pill.busy .dot { background: var(--warn); }
+button, .btn {
+  font: inherit; cursor: pointer; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  padding: 8px 14px; min-height: 38px;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+button.danger { color: var(--danger); }
+button.sm { padding: 4px 10px; min-height: 30px; font-size: 13px; }
+input, select, textarea {
+  font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-height: 38px;
+  max-width: 100%;
+}
+input[type="range"] { padding: 0; min-height: 0; border: 0; background: transparent; accent-color: var(--accent); }
+input[type="checkbox"] { min-height: 0; accent-color: var(--accent); }
+label { color: var(--muted); font-size: 13px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; min-width: 0;
+}
+.card h2 { font-size: 15px; margin: 0 0 12px; }
+.card h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row + .row { margin-top: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+.status { font-size: 13px; margin-top: 8px; color: var(--muted); min-height: 1.5em; }
+.status.ok { color: var(--ok); }
+.status.err { color: var(--danger); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+.tab {
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none;
+  padding: 10px 14px; color: var(--muted); font-weight: 600; white-space: nowrap;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.panel[hidden] { display: none; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* E-paper preview */
+.epd-frame {
+  background: #e9e7e1; border-radius: 14px; padding: 14px;
+  border: 1px solid var(--border); display: flex; justify-content: center;
+}
+:root[data-theme="dark"] .epd-frame { background: #2a2c30; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .epd-frame { background: #2a2c30; } }
+#out {
+  width: 100%; max-width: 750px; aspect-ratio: 250 / 128; height: auto;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  background: #fff; border-radius: 3px; cursor: grab; touch-action: none;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+}
+#out.dragging { cursor: grabbing; }
+#out.placing { cursor: crosshair; }
+.drop {
+  border: 1px dashed var(--border); border-radius: 10px; padding: 12px; text-align: center;
+  color: var(--muted); font-size: 13px;
+}
+.drop.over { border-color: var(--accent); color: var(--accent); }
+.slider { display: grid; grid-template-columns: 110px minmax(0, 1fr) 44px; align-items: center; gap: 8px; }
+.slider output { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.layers { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.layers li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
+  background: var(--surface-2); font-size: 13px;
+}
+.layers li.sel { outline: 2px solid var(--accent); }
+.layers li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); flex: none; }
+progress { width: 100%; height: 8px; accent-color: var(--accent); }
+#log {
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--surface-2); border-radius: 8px; padding: 10px;
+  height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0;
+}
+.log-err { color: var(--danger); }
+.log-rx { color: var(--accent); }
+.banner {
+  border: 1px solid var(--warn); color: var(--text); background: var(--surface);
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; font-size: 14px;
+}
+.banner[hidden] { display: none; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.mode-btns button.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 0 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>AESL0213C Controller</h1>
+      <p>Nordic nRF52811 · e-paper 2.13" 250×128 · Web Bluetooth</p>
+    </div>
+    <div class="conn">
+      <span id="connPill" class="pill"><span class="dot"></span><span id="connText">Chưa kết nối</span></span>
+      <button id="btnConnect" class="primary" type="button">Quét &amp; kết nối</button>
+      <button id="btnReconnect" type="button" disabled>Kết nối lại</button>
+      <button id="btnTheme" type="button" class="sm" title="Đổi giao diện sáng/tối" aria-label="Đổi giao diện sáng/tối">◐</button>
+    </div>
+  </header>
+
+  <div id="noBle" class="banner" hidden>
+    Trình duyệt này không hỗ trợ Web Bluetooth. Hãy dùng Chrome / Edge trên máy tính hoặc Android
+    (trên iOS dùng ứng dụng Bluefy), và mở trang qua HTTPS.
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="device" role="tab">Thiết bị</button>
+    <button class="tab" data-tab="image" role="tab">Gửi ảnh / Nhãn</button>
+    <button class="tab" data-tab="advanced" role="tab">Nâng cao</button>
+  </nav>
+
+  <div class="grid">
+    <main>
+      <!-- ============ DEVICE TAB ============ -->
+      <section class="panel" data-panel="device">
+        <div class="card">
+          <h2>Chế độ hiển thị</h2>
+          <div class="row mode-btns">
+            <button type="button" data-mode="1">📅 Lịch</button>
+            <button type="button" data-mode="2" title="Bấm lần nữa để đổi mặt đồng hồ">🕒 Đồng hồ</button>
+            <button type="button" data-mode="0">🖼 Ảnh</button>
+          </div>
+          <p class="hint">Mỗi lần chuyển chế độ, trang sẽ đồng bộ luôn giờ hiện tại của máy. Ở chế độ Đồng hồ, bấm lại để đổi kiểu mặt đồng hồ.</p>
+        </div>
+
+        <div class="card">
+          <h2>Thời gian</h2>
+          <div class="row">
+            <button id="btnSyncTime" type="button" class="primary">Đồng bộ giờ</button>
+            <div class="field">
+              <label for="tzHours">Múi giờ (UTC±)</label>
+              <input id="tzHours" type="number" min="-12" max="14" step="1" style="width:90px">
+            </div>
+            <div class="field">
+              <label for="weekStart">Ngày đầu tuần</label>
+              <select id="weekStart">
+                <option value="1">Thứ 2</option>
+                <option value="0">Chủ Nhật</option>
+              </select>
+            </div>
+          </div>
+          <div id="timeStatus" class="status" role="status"></div>
+        </div>
+
+        <div class="card">
+          <h2>Lịch ngủ màn hình</h2>
+          <p class="hint" style="margin-top:0">Đồng hồ vẫn chạy nhưng màn hình ngừng refresh trong khoảng này để tiết kiệm pin (ví dụ 23:00 → 07:00).</p>
+          <div class="row" style="margin-top:10px">
+            <div class="field"><label for="sleepStart">Ngủ lúc</label><input id="sleepStart" type="time" value="23:00" step="60"></div>
+            <div class="field"><label for="sleepEnd">Thức lúc</label><input id="sleepEnd" type="time" value="07:00" step="60"></div>
+          </div>
+          <div class="row">
+            <button id="btnSleepRead" type="button">Đọc lịch</button>
+            <button id="btnSleepOn" type="button" class="primary">Lưu &amp; bật</button>
+            <button id="btnSleepOff" type="button" class="danger">Tắt lịch</button>
+          </div>
+          <div id="sleepStatus" class="status" role="status">Chưa đọc lịch.</div>
+        </div>
+      </section>
+
+      <!-- ============ IMAGE TAB ============ -->
+      <section class="panel" data-panel="image" hidden>
+        <div class="card">
+          <div class="epd-frame"><canvas id="out" width="250" height="128" aria-label="Xem trước màn hình e-paper"></canvas></div>
+          <p class="hint">Xem trước đúng 250×128 điểm ảnh và 3 màu thật của màn. Kéo trên hình để di chuyển ảnh hoặc chữ.</p>
+          <div class="row" style="margin-top:12px">
+            <button id="btnSend" type="button" class="primary">Gửi lên màn hình</button>
+            <button id="btnClearScreen" type="button">Xóa trắng màn</button>
+            <button id="btnDownload" type="button" class="sm">Tải PNG</button>
+          </div>
+          <div style="margin-top:10px"><progress id="sendProgress" max="100" value="0"></progress></div>
+          <div id="sendStatus" class="status" role="status"></div>
+        </div>
+
+        <div class="card">
+          <h2>Ảnh nền</h2>
+          <div id="drop" class="drop">
+            Kéo thả ảnh vào đây hoặc
+            <label class="btn" style="display:inline-block;padding:4px 10px;margin-left:4px;color:var(--text)">chọn tệp
+              <input id="file" type="file" accept="image/*" hidden>
+            </label>
+            · hoặc dán (Ctrl+V)
+          </div>
+          <div class="row">
+            <button type="button" class="sm" data-fit="fit">Vừa khung</button>
+            <button type="button" class="sm" data-fit="fill">Phủ kín</button>
+            <button type="button" class="sm" data-fit="stretch">Kéo giãn</button>
+            <button type="button" class="sm" id="btnRotL">⟲ 90°</button>
+            <button type="button" class="sm" id="btnRotR">⟳ 90°</button>
+            <button type="button" class="sm" id="btnCenter">Căn giữa</button>
+            <button type="button" class="sm danger" id="btnRemoveImg">Bỏ ảnh</button>
+          </div>
+          <div class="row" style="display:block">
+            <div class="slider"><label for="zoom">Thu phóng</label><input id="zoom" type="range" min="10" max="400" value="100"><output id="zoomV">100%</output></div>
+            <div class="slider"><label for="bright">Độ sáng</label><input id="bright" type="range" min="-100" max="100" value="0"><output id="brightV">0</output></div>
+            <div class="slider"><label for="contrast">Tương phản</label><input id="contrast" type="range" min="-100" max="100" value="0"><output id="contrastV">0</output></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Màu &amp; dithering</h2>
+          <div class="fields">
+            <div class="field">
+              <label for="palette">Bảng màu</label>
+              <select id="palette">
+                <option value="bwr">Đen / Trắng / Đỏ</option>
+                <option value="bw">Đen / Trắng</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="dither">Thuật toán</label>
+              <select id="dither">
+                <option value="none">Không dither (ngưỡng)</option>
+                <option value="fs" selected>Floyd–Steinberg</option>
+                <option value="atkinson">Atkinson</option>
+                <option value="bayer">Bayer 4×4</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="display:block">
+            <div class="slider"><label for="thresh">Ngưỡng đen</label><input id="thresh" type="range" min="10" max="245" value="128"><output id="threshV">128</output></div>
+            <div class="slider"><label for="redSens">Độ nhạy đỏ</label><input id="redSens" type="range" min="10" max="200" value="80"><output id="redSensV">80</output></div>
+          </div>
+          <p class="hint">Chữ và khung vẽ thêm luôn được giữ sắc nét, chỉ ảnh nền mới bị dither.</p>
+        </div>
+
+        <div class="card">
+          <h2>Mẫu nhãn giá</h2>
+          <div class="fields">
+            <div class="field"><label for="tplName">Tên sản phẩm</label><input id="tplName" value="Cà phê sữa đá"></div>
+            <div class="field"><label for="tplPrice">Giá bán</label><input id="tplPrice" value="29.000"></div>
+            <div class="field"><label for="tplUnit">Đơn vị</label><input id="tplUnit" value="đ/ly"></div>
+            <div class="field"><label for="tplOld">Giá cũ (tùy chọn)</label><input id="tplOld" value="35.000"></div>
+            <div class="field"><label for="tplNote">Dòng phụ</label><input id="tplNote" value="Khuyến mãi đến 30/10"></div>
+            <div class="field">
+              <label for="tplStyle">Kiểu</label>
+              <select id="tplStyle">
+                <option value="red">Dải đỏ phía trên</option>
+                <option value="black">Dải đen phía trên</option>
+                <option value="plain">Tối giản</option>
+              </select>
+            </div>
+          </div>
+          <div class="row"><button id="btnTemplate" type="button">Áp dụng mẫu</button></div>
+          <p class="hint">Mẫu sẽ thay thế các lớp chữ hiện có; sau đó vẫn chỉnh/kéo từng lớp được.</p>
+        </div>
+
+        <div class="card">
+          <h2>Chữ &amp; lớp</h2>
+          <div class="fields">
+            <div class="field" style="grid-column:1/-1"><label for="txt">Nội dung</label><input id="txt" placeholder="Nhập chữ…" maxlength="120"></div>
+            <div class="field"><label for="txtSize">Cỡ chữ (px)</label><input id="txtSize" type="number" min="6" max="128" value="20"></div>
+            <div class="field">
+              <label for="txtColor">Màu</label>
+              <select id="txtColor">
+                <option value="#000000">Đen</option>
+                <option value="#ff0000">Đỏ</option>
+                <option value="#ffffff">Trắng</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="txtFont">Font</label>
+              <select id="txtFont">
+                <option value="system-ui, Arial, sans-serif">Sans</option>
+                <option value="Georgia, 'Times New Roman', serif">Serif</option>
+                <option value="ui-monospace, Consolas, monospace">Mono</option>
+              </select>
+            </div>
+            <div class="field" style="justify-content:flex-end">
+              <label><input id="txtBold" type="checkbox" checked> Đậm</label>
+            </div>
+          </div>
+          <div class="row">
+            <button id="btnAddText" type="button">Thêm chữ → bấm vị trí trên hình</button>
+            <button id="btnUpdText" type="button" class="sm" disabled>Cập nhật lớp đang chọn</button>
+          </div>
+          <ul id="layers" class="layers"></ul>
+        </div>
+      </section>
+
+      <!-- ============ ADVANCED TAB ============ -->
+      <section class="panel" data-panel="advanced" hidden>
+        <div class="card">
+          <h2>Kích hoạt</h2>
+          <p class="hint" style="margin-top:0">Một số firmware bị khóa cho tới khi kích hoạt. Kiểm tra trước; nếu firmware kiểu "legacy" báo <em>locked</em>, mã được tính từ 4 ký tự hex cuối của tên Bluetooth.</p>
+          <div class="row" style="margin-top:10px">
+            <button id="btnActQuery" type="button">Kiểm tra kích hoạt</button>
+            <input id="actCode" placeholder="Mã (hex, để trống = tự tính)" style="width:230px">
+            <button id="btnActivate" type="button">Kích hoạt</button>
+          </div>
+          <div id="actStatus" class="status" role="status"></div>
+        </div>
+        <div class="card">
+          <h2>Gửi lệnh thô</h2>
+          <div class="row">
+            <input id="rawHex" placeholder="vd: 01  hoặc  fbff" style="flex:1;min-width:180px;font-family:ui-monospace,monospace">
+            <button id="btnRaw" type="button">Gửi</button>
+          </div>
+          <details style="margin-top:12px">
+            <summary>Bảng lệnh (characteristic 62750002)</summary>
+            <dl class="kv" style="margin-top:8px">
+              <dt>01</dt><dd>Khởi tạo màn hình (init)</dd>
+              <dt>05</dt><dd>Refresh màn hình</dd>
+              <dt>20 tttttttt zz mm</dt><dd>Đặt giờ (unix BE), múi giờ, chế độ (0 ảnh · 1 lịch · 2 đồng hồ)</dd>
+              <dt>21 ww</dt><dd>Ngày đầu tuần (0 CN · 1 T2)</dd>
+              <dt>30 pp …</dt><dd>Ghi dữ liệu ảnh; pp = 00/f0 (đầu/tiếp) | 0f (đen) / 00 (đỏ)</dd>
+              <dt>fb ff</dt><dd>Đọc lịch ngủ</dd>
+              <dt>fb e sh sm eh em</dt><dd>Đặt lịch ngủ</dd>
+              <dt>a0 [cc cc]</dt><dd>Truy vấn / gửi mã kích hoạt</dd>
+            </dl>
+          </details>
+          <label style="display:block;margin-top:12px"><input id="flip180" type="checkbox"> Xoay ảnh 180° khi gửi (nếu màn lắp ngược)</label>
+        </div>
+      </section>
+    </main>
+
+    <aside>
+      <div class="card">
+        <h2>Thông tin thiết bị</h2>
+        <dl class="kv">
+          <dt>Tên</dt><dd id="infoName">—</dd>
+          <dt>Firmware</dt><dd id="infoFw">—</dd>
+          <dt>Model ID</dt><dd id="infoModel">—</dd>
+          <dt>Panel</dt><dd id="infoPanel">—</dd>
+          <dt>Chế độ</dt><dd id="infoMode">—</dd>
+          <dt>Gói ảnh</dt><dd id="infoChunk">128 byte</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+          <h2 style="margin:0">Nhật ký</h2>
+          <button id="btnClearLog" type="button" class="sm">Xóa</button>
+        </div>
+        <pre id="log" aria-live="polite"></pre>
+      </div>
+    </aside>
+  </div>
+  <footer>Giao thức tương thích firmware EPD nRF52 (service 62750001-d828-918d-fb46-b6c11c675aec). Chạy hoàn toàn trong trình duyệt.</footer>
+</div>
+
+<script>
+'use strict';
+/* ================================================================
+ * BLE protocol — nRF52 EPD firmware (2.13" 250x128, model 2)
+ * ================================================================ */
+const SERVICE_UUID = '62750001-d828-918d-fb46-b6c11c675aec';
+const CHAR_UUID    = '62750002-d828-918d-fb46-b6c11c675aec';
+const VERSION_UUID = '62750003-d828-918d-fb46-b6c11c675aec';
+const CMD = {
+  INIT: 0x01, REFRESH: 0x05, SET_TIME: 0x20, WEEK_START: 0x21,
+  WRITE_IMAGE: 0x30, SLEEP: 0xfb, ACTIVATE: 0xa0,
+};
+const W = 250, H = 128;
+const MODE_NAMES = { 0: 'Ảnh', 1: 'Lịch', 2: 'Đồng hồ', 3: 'Đồng hồ (mặt 2)' };
+
+const $ = id => document.getElementById(id);
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+const hex = arr => Array.from(arr, b => b.toString(16).padStart(2, '0')).join(' ');
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('aesl.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('aesl.' + k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+};
+
+const state = {
+  device: null, server: null, ch: null,
+  fw: 0, modelId: null, panel: null, mode: 1,
+  chunk: 128, busy: false,
+  waiters: [],
+};
+
+/* ---------- log ---------- */
+function log(msg, cls) {
+  const t = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+  const line = document.createElement('div');
+  line.textContent = `${t}  ${msg}`;
+  if (cls) line.className = cls;
+  const el = $('log');
+  el.appendChild(line);
+  while (el.childNodes.length > 500) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+function setStatus(id, msg, kind) {
+  const el = $(id);
+  el.textContent = msg;
+  el.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+/* ---------- connection UI ---------- */
+function setConn(text, cls) {
+  $('connText').textContent = text;
+  $('connPill').className = 'pill' + (cls ? ' ' + cls : '');
+}
+function refreshInfo() {
+  $('infoName').textContent = state.device?.name || '—';
+  $('infoFw').textContent = state.fw ? `v${state.fw} (0x${state.fw.toString(16)})` : '—';
+  $('infoModel').textContent = state.modelId ?? '—';
+  $('infoPanel').textContent = state.panel === 0x21 ? '2.13" (0x21)' : (state.panel != null ? '0x' + state.panel.toString(16) : (state.modelId ? '—' : '—'));
+  $('infoMode').textContent = state.ch ? (MODE_NAMES[state.mode] ?? state.mode) : '—';
+  $('infoChunk').textContent = state.chunk + ' byte';
+  document.querySelectorAll('.mode-btns button').forEach(b => {
+    const m = Number(b.dataset.mode);
+    b.classList.toggle('active', !!state.ch && (m === state.mode || (m === 2 && state.mode === 3)));
+  });
+  const connected = !!state.ch;
+  $('btnConnect').textContent = connected ? 'Ngắt kết nối' : 'Quét & kết nối';
+  $('btnReconnect').disabled = !state.device;
+}
+
+/* ---------- serialized GATT writes ---------- */
+let writeChain = Promise.resolve();
+function send(bytes, quiet) {
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const job = writeChain.then(async () => {
+    if (!state.ch) throw new Error('Chưa kết nối thiết bị.');
+    if (!quiet) log('→ ' + hex(data));
+    await state.ch.writeValueWithResponse(data);
+  });
+  writeChain = job.catch(() => {});
+  return job;
+}
+
+/* Wait for a notification matching predicate. */
+function waitFor(pred, timeoutMs) {
+  return new Promise(resolve => {
+    const w = { pred, resolve };
+    w.timer = setTimeout(() => {
+      state.waiters = state.waiters.filter(x => x !== w);
+      resolve(null);
+    }, timeoutMs);
+    state.waiters.push(w);
+  });
+}
+
+/* ---------- notifications ---------- */
+function onNotify(ev) {
+  const v = ev.target.value;
+  const d = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+
+  for (const w of [...state.waiters]) {
+    if (w.pred(d)) {
+      clearTimeout(w.timer);
+      state.waiters = state.waiters.filter(x => x !== w);
+      w.resolve(d);
+    }
+  }
+
+  // Sleep schedule reply: fb state en sh sm eh em [active]
+  if ((d.length === 7 || d.length === 8) && d[0] === CMD.SLEEP && d[1] <= 2 && d[2] <= 1 &&
+      d[3] < 24 && d[4] < 60 && d[5] < 24 && d[6] < 60) {
+    log('← lịch ngủ ' + hex(d), 'log-rx');
+    showSleep(d);
+    return;
+  }
+  // Week start ack: 21 state ws
+  if (d.length === 3 && d[0] === CMD.WEEK_START && d[1] <= 2 && d[2] <= 1) {
+    log(`← ngày đầu tuần: trạng thái ${d[1]}, giá trị ${d[2]}`, 'log-rx');
+    return;
+  }
+  // Signed activation reply
+  if (d.length === 15 && d[0] === CMD.ACTIVATE) {
+    const code = String.fromCharCode(...d.slice(11, 15));
+    const active = d[2] !== 0;
+    log(`← kích hoạt: ${active ? 'đã kích hoạt' : 'đang khóa'} · mã thiết bị ${code}`, 'log-rx');
+    setStatus('actStatus', active ? `Đã kích hoạt (thiết bị ${code}).` : `Thiết bị đang khóa (${code}) — cần công cụ kích hoạt có chữ ký.`, active ? 'ok' : 'err');
+    return;
+  }
+
+  const text = new TextDecoder().decode(d);
+  if (text.startsWith('mtu=')) {
+    const mtu = parseInt(text.slice(4), 10);
+    if (Number.isFinite(mtu) && mtu > 2) state.chunk = Math.max(18, Math.min(244, mtu - 2));
+    log(`← ${text.trim()} → gói ảnh ${state.chunk} byte`, 'log-rx');
+    refreshInfo();
+    return;
+  }
+  if (text.startsWith('activation=')) {
+    const ok = text.startsWith('activation=ok');
+    log('← ' + text.trim(), 'log-rx');
+    setStatus('actStatus', ok ? 'Đã kích hoạt.' : 'Thiết bị đang khóa — nhập mã hoặc để trống để tự tính.', ok ? 'ok' : 'err');
+    return;
+  }
+  // Config packet: byte 7 = model id, 11 = mode, 12 = week start, 13 = panel profile
+  if (d.length >= 8 && d.length <= 22 && [1, 2, 3, 4, 5, 7].includes(d[7])) {
+    state.modelId = d[7];
+    if (d.length > 11) state.mode = d[11];
+    if (d.length > 12 && d[12] <= 1) $('weekStart').value = String(d[12]);
+    state.panel = d.length > 13 ? d[13] : null;
+    log(`← cấu hình: model ${state.modelId}, chế độ ${state.mode}` +
+        (state.panel === 0x21 ? ', panel 2.13"' : ''), 'log-rx');
+    if (state.modelId !== 2) log(`Cảnh báo: model ${state.modelId} không phải màn 2.13"/2.9" (model 2). Kiểm tra lại thiết bị.`, 'log-err');
+    refreshInfo();
+    return;
+  }
+  log('← ' + (/^[\x20-\x7e\r\n]+$/.test(text) ? text.trim() : hex(d)), 'log-rx');
+}
+
+/* ---------- connect / disconnect ---------- */
+async function scanAndConnect() {
+  if (state.ch) { state.device?.gatt?.disconnect(); return; }
+  try {
+    setConn('Đang quét…', 'busy');
+    state.device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [SERVICE_UUID],
+    });
+    state.device.addEventListener('gattserverdisconnected', onDisconnected);
+  } catch (e) {
+    setConn('Chưa kết nối');
+    log('Đã hủy quét: ' + e.message);
+    return;
+  }
+  await connect();
+}
+
+async function connect() {
+  try {
+    setConn('Đang kết nối…', 'busy');
+    log('Kết nối tới ' + (state.device.name || state.device.id));
+    state.server = await state.device.gatt.connect();
+    const svc = await state.server.getPrimaryService(SERVICE_UUID);
+    const ch = await svc.getCharacteristic(CHAR_UUID);
+    try {
+      const vch = await svc.getCharacteristic(VERSION_UUID);
+      const vv = await vch.readValue();
+      state.fw = vv.getUint8(0);
+      log(`Firmware v${state.fw}`);
+    } catch {
+      state.fw = 0;
+      log('Không đọc được phiên bản firmware.');
+    }
+    // Register the listener before enabling notifications: the firmware sends
+    // its config packet as soon as the CCCD is written.
+    ch.addEventListener('characteristicvaluechanged', onNotify);
+    await ch.startNotifications();
+    state.ch = ch;
+    setConn('Đã kết nối', 'on');
+    refreshInfo();
+    await send([CMD.INIT]);
+    await sleepMs(80);
+    readSleep().catch(() => {});
+  } catch (e) {
+    log('Kết nối thất bại: ' + e.message, 'log-err');
+    if (/service/i.test(e.message)) log('Thiết bị không có dịch vụ EPD 62750001… — có thể firmware khác hoặc chọn nhầm thiết bị.', 'log-err');
+    try { state.device?.gatt?.disconnect(); } catch { /* ignore */ }
+    resetConn();
+  }
+}
+
+function resetConn() {
+  state.server = null; state.ch = null;
+  state.modelId = null; state.panel = null; state.fw = 0; state.chunk = 128;
+  state.waiters.forEach(w => { clearTimeout(w.timer); w.resolve(null); });
+  state.waiters = [];
+  setConn('Chưa kết nối');
+  refreshInfo();
+}
+function onDisconnected() {
+  log('Đã ngắt kết nối.');
+  resetConn();
+}
+
+/* ---------- time & modes ---------- */
+function tzHours() {
+  const v = parseInt($('tzHours').value, 10);
+  return Number.isFinite(v) ? v : Math.round(-new Date().getTimezoneOffset() / 60);
+}
+async function sendTimeAndMode(mode) {
+  const ts = Math.floor(Date.now() / 1000);
+  const tz = tzHours();
+  await send([CMD.SET_TIME, (ts >>> 24) & 0xff, (ts >>> 16) & 0xff, (ts >>> 8) & 0xff, ts & 0xff, tz & 0xff, mode & 0xff]);
+  const prev = state.mode;
+  state.mode = (mode === 2 && (prev === 2 || prev === 3)) ? (prev === 2 ? 3 : 2) : mode;
+  refreshInfo();
+  const when = new Date(ts * 1000).toLocaleString('vi-VN', { hour12: false });
+  setStatus('timeStatus', `Đã đồng bộ ${when} (UTC${tz >= 0 ? '+' : ''}${tz}).`, 'ok');
+}
+async function guarded(fn, statusId) {
+  if (!state.ch) { log('Hãy kết nối thiết bị trước.', 'log-err'); if (statusId) setStatus(statusId, 'Chưa kết nối thiết bị.', 'err'); return; }
+  if (state.busy) { log('Đang bận, vui lòng chờ…'); return; }
+  state.busy = true;
+  try { await fn(); }
+  catch (e) { log('Lỗi: ' + e.message, 'log-err'); if (statusId) setStatus(statusId, 'Lỗi: ' + e.message, 'err'); }
+  finally { state.busy = false; }
+}
+
+/* ---------- sleep schedule ---------- */
+const isSleepReply = d => (d.length === 7 || d.length === 8) && d[0] === CMD.SLEEP && d[1] <= 2;
+const pad2 = n => String(n).padStart(2, '0');
+function showSleep(d) {
+  if (d[1] === 1) { setStatus('sleepStatus', 'Thiết bị đang lưu lịch…'); return; }
+  if (d[1] === 2) { setStatus('sleepStatus', 'Thiết bị không lưu được lịch. Đợi vài giây rồi thử lại.', 'err'); return; }
+  $('sleepStart').value = `${pad2(d[3])}:${pad2(d[4])}`;
+  $('sleepEnd').value = `${pad2(d[5])}:${pad2(d[6])}`;
+  const range = `${pad2(d[3])}:${pad2(d[4])} → ${pad2(d[5])}:${pad2(d[6])}`;
+  setStatus('sleepStatus', d[2] ? `Lịch ngủ đang BẬT: ${range}` + (d.length === 8 && d[7] ? ' (đang trong giờ ngủ)' : '') : 'Lịch ngủ đang TẮT.', 'ok');
+}
+async function readSleep() {
+  setStatus('sleepStatus', 'Đang đọc lịch…');
+  const reply = waitFor(isSleepReply, 3000);
+  await send([CMD.SLEEP, 0xff]);
+  if (!await reply) setStatus('sleepStatus', 'Firmware không phản hồi lệnh lịch ngủ (có thể chưa hỗ trợ).', 'err');
+}
+async function writeSleep(enabled) {
+  const [sh, sm] = $('sleepStart').value.split(':').map(Number);
+  const [eh, em] = $('sleepEnd').value.split(':').map(Number);
+  if ([sh, sm, eh, em].some(n => !Number.isFinite(n))) throw new Error('Nhập đủ giờ ngủ và giờ thức.');
+  if (enabled && sh === eh && sm === em) throw new Error('Giờ ngủ và giờ thức phải khác nhau.');
+  setStatus('sleepStatus', 'Đang lưu…');
+  let reply = waitFor(isSleepReply, 30000);
+  await send([CMD.SLEEP, enabled ? 1 : 0, sh, sm, eh, em]);
+  let d = await reply;
+  const deadline = Date.now() + 30000;
+  while (d && d[1] === 1 && Date.now() < deadline) {
+    await sleepMs(400);
+    reply = waitFor(isSleepReply, 5000);
+    await send([CMD.SLEEP, 0xff], true);
+    d = await reply;
+  }
+  if (!d) throw new Error('Thiết bị không xác nhận lịch ngủ.');
+  if (d[1] !== 0) throw new Error('Thiết bị không lưu được lịch.');
+  log(enabled ? 'Đã lưu và bật lịch ngủ.' : 'Đã tắt lịch ngủ.');
+}
+
+/* ---------- activation ---------- */
+function legacyCode() {
+  const m = (state.device?.name || '').match(/([0-9a-fA-F]{4})$/);
+  if (!m) return null;
+  const code = (parseInt(m[1], 16) ^ 0x7611) & 0xffff;
+  return code === 0xffff ? 0 : code;
+}
+
+/* ================================================================
+ * Image editor
+ * ================================================================ */
+const out = $('out');
+const outCtx = out.getContext('2d', { willReadFrequently: true });
+const work = document.createElement('canvas');
+work.width = W; work.height = H;
+const workCtx = work.getContext('2d', { willReadFrequently: true });
+const layerCanvas = document.createElement('canvas');
+layerCanvas.width = W; layerCanvas.height = H;
+const layerCtx = layerCanvas.getContext('2d', { willReadFrequently: true });
+
+const ed = {
+  img: null, fit: 'fill', rot: 0, zoom: 1, ox: 0, oy: 0,
+  layers: [], sel: -1, placing: false,
+};
+
+function baseScale(iw, ih) {
+  const rw = ed.rot % 180 === 0 ? iw : ih;
+  const rh = ed.rot % 180 === 0 ? ih : iw;
+  if (ed.fit === 'stretch') return [W / rw, H / rh];
+  const s = ed.fit === 'fit' ? Math.min(W / rw, H / rh) : Math.max(W / rw, H / rh);
+  return [s, s];
+}
+
+function adjust(data) {
+  const b = Number($('bright').value) * 1.28;
+  const c = Number($('contrast').value);
+  const f = (259 * (c + 255)) / (255 * (259 - c));
+  if (!b && !c) return;
+  for (let i = 0; i < data.length; i += 4) {
+    for (let k = 0; k < 3; k++) data[i + k] = Math.max(0, Math.min(255, f * (data[i + k] - 128) + 128 + b));
+  }
+}
+
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+function quantize(imgData, opts) {
+  const { palette, algo, thresh, redSens } = opts;
+  const d = imgData.data;
+  const buf = new Float32Array(W * H * 3);
+  for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
+    // Composite transparency on white.
+    const a = d[i + 3] / 255;
+    buf[j] = d[i] * a + 255 * (1 - a);
+    buf[j + 1] = d[i + 1] * a + 255 * (1 - a);
+    buf[j + 2] = d[i + 2] * a + 255 * (1 - a);
+  }
+  const kernel = algo === 'fs'
+    ? [[1, 0, 7 / 16], [-1, 1, 3 / 16], [0, 1, 5 / 16], [1, 1, 1 / 16]]
+    : algo === 'atkinson'
+      ? [[1, 0, 1 / 8], [2, 0, 1 / 8], [-1, 1, 1 / 8], [0, 1, 1 / 8], [1, 1, 1 / 8], [0, 2, 1 / 8]]
+      : null;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const j = (y * W + x) * 3;
+      const r = buf[j], g = buf[j + 1], b = buf[j + 2];
+      let nr, ng, nb;
+      if (palette === 'bwr' && r > 100 && r - Math.max(g, b) > redSens) {
+        nr = 255; ng = 0; nb = 0;
+      } else {
+        let t = thresh;
+        if (algo === 'bayer') t += (BAYER4[(y & 3) * 4 + (x & 3)] / 16 - 0.5) * 128;
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        nr = ng = nb = lum < t ? 0 : 255;
+      }
+      const i4 = (y * W + x) * 4;
+      d[i4] = nr; d[i4 + 1] = ng; d[i4 + 2] = nb; d[i4 + 3] = 255;
+      if (kernel) {
+        const er = r - nr, eg = g - ng, eb = b - nb;
+        for (const [dx, dy, wgt] of kernel) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || xx >= W || yy >= H) continue;
+          const k = (yy * W + xx) * 3;
+          buf[k] += er * wgt; buf[k + 1] += eg * wgt; buf[k + 2] += eb * wgt;
+        }
+      }
+    }
+  }
+  return imgData;
+}
+
+function layerFont(L) {
+  return `${L.bold ? '700 ' : ''}${L.size}px ${L.font}`;
+}
+function drawLayers(ctx) {
+  for (const L of ed.layers) {
+    if (L.type === 'rect') {
+      ctx.fillStyle = L.color;
+      ctx.fillRect(L.x, L.y, L.w, L.h);
+    } else {
+      ctx.font = layerFont(L);
+      ctx.fillStyle = L.color;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = L.align || 'left';
+      ctx.fillText(L.text, L.x, L.y);
+      if (L.strike) {
+        const m = ctx.measureText(L.text);
+        const x0 = L.align === 'right' ? L.x - m.width : L.align === 'center' ? L.x - m.width / 2 : L.x;
+        ctx.fillRect(x0 - 1, L.y + L.size * 0.5, m.width + 2, Math.max(1, Math.round(L.size / 12)));
+      }
+    }
+  }
+}
+function layerBox(L) {
+  if (L.type === 'rect') return { x: L.x, y: L.y, w: L.w, h: L.h };
+  layerCtx.font = layerFont(L);
+  const w = layerCtx.measureText(L.text).width;
+  const x0 = L.align === 'right' ? L.x - w : L.align === 'center' ? L.x - w / 2 : L.x;
+  return { x: x0, y: L.y, w, h: L.size };
+}
+
+/* Snap near-palette pixels of the (antialiased) layer canvas to pure colors,
+ * so text stays crisp while the background photo gets dithered. */
+function quantizeLayers(imgData) {
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const a = d[i + 3];
+    if (a < 110) { d[i + 3] = 0; continue; }
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const dist = (R, G, B) => (r - R) ** 2 + (g - G) ** 2 + (b - B) ** 2;
+    const opts = [[0, 0, 0], [255, 255, 255], [255, 0, 0]];
+    let best = opts[0], bd = Infinity;
+    for (const o of opts) { const v = dist(...o); if (v < bd) { bd = v; best = o; } }
+    if ($('palette').value === 'bw' && best[1] === 0 && best[0] === 255) best = [0, 0, 0];
+    d[i] = best[0]; d[i + 1] = best[1]; d[i + 2] = best[2]; d[i + 3] = 255;
+  }
+  return imgData;
+}
+
+let renderQueued = false;
+function render() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; renderNow(); });
+}
+function renderNow() {
+  workCtx.fillStyle = '#fff';
+  workCtx.fillRect(0, 0, W, H);
+  if (ed.img) {
+    const iw = ed.img.naturalWidth || ed.img.width, ih = ed.img.naturalHeight || ed.img.height;
+    const [sx, sy] = baseScale(iw, ih);
+    workCtx.save();
+    workCtx.imageSmoothingQuality = 'high';
+    workCtx.translate(W / 2 + ed.ox, H / 2 + ed.oy);
+    workCtx.rotate(ed.rot * Math.PI / 180);
+    // Rotation is applied before scaling, so swap axes for 90/270.
+    const [ax, ay] = ed.rot % 180 === 0 ? [sx, sy] : [sy, sx];
+    workCtx.scale(ax * ed.zoom, ay * ed.zoom);
+    workCtx.drawImage(ed.img, -iw / 2, -ih / 2);
+    workCtx.restore();
+  }
+  const base = workCtx.getImageData(0, 0, W, H);
+  adjust(base.data);
+  quantize(base, {
+    palette: $('palette').value,
+    algo: $('dither').value,
+    thresh: Number($('thresh').value),
+    redSens: Number($('redSens').value),
+  });
+  outCtx.putImageData(base, 0, 0);
+
+  layerCtx.clearRect(0, 0, W, H);
+  drawLayers(layerCtx);
+  const lay = quantizeLayers(layerCtx.getImageData(0, 0, W, H));
+  layerCtx.putImageData(lay, 0, 0);
+  outCtx.drawImage(layerCanvas, 0, 0);
+}
+
+function renderLayerList() {
+  const ul = $('layers');
+  ul.textContent = '';
+  ed.layers.forEach((L, i) => {
+    const li = document.createElement('li');
+    if (i === ed.sel) li.className = 'sel';
+    const sw = document.createElement('i');
+    sw.className = 'swatch';
+    sw.style.background = L.color;
+    const span = document.createElement('span');
+    span.textContent = L.type === 'rect' ? `Khối ${L.w}×${L.h}` : `“${L.text}” · ${L.size}px`;
+    span.style.cursor = 'pointer';
+    span.onclick = () => selectLayer(i === ed.sel ? -1 : i);
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'sm danger'; del.textContent = '×';
+    del.title = 'Xóa lớp'; del.setAttribute('aria-label', 'Xóa lớp');
+    del.onclick = () => { ed.layers.splice(i, 1); selectLayer(-1); render(); };
+    li.append(sw, span, del);
+    ul.appendChild(li);
+  });
+}
+function selectLayer(i) {
+  ed.sel = i;
+  const L = ed.layers[i];
+  $('btnUpdText').disabled = !(L && L.type === 'text');
+  if (L && L.type === 'text') {
+    $('txt').value = L.text; $('txtSize').value = L.size; $('txtColor').value = L.color;
+    $('txtBold').checked = !!L.bold; $('txtFont').value = L.font;
+  }
+  renderLayerList();
+}
+function textFromForm(x, y) {
+  return {
+    type: 'text', text: $('txt').value.trim(), x, y,
+    size: Math.max(6, Math.min(128, Number($('txtSize').value) || 20)),
+    color: $('txtColor').value, bold: $('txtBold').checked, font: $('txtFont').value, align: 'left',
+  };
+}
+
+function applyTemplate() {
+  const style = $('tplStyle').value;
+  const name = $('tplName').value.trim();
+  const price = $('tplPrice').value.trim();
+  const unit = $('tplUnit').value.trim();
+  const old = $('tplOld').value.trim();
+  const note = $('tplNote').value.trim();
+  const F = 'system-ui, Arial, sans-serif';
+  const L = [];
+  const band = style !== 'plain';
+  if (band) L.push({ type: 'rect', x: 0, y: 0, w: W, h: 30, color: style === 'red' ? '#ff0000' : '#000000' });
+  L.push({ type: 'text', text: name, x: 8, y: 6, size: 19, bold: true, font: F, color: band ? '#ffffff' : '#000000' });
+  if (!band) L.push({ type: 'rect', x: 8, y: 30, w: W - 16, h: 2, color: '#000000' });
+  // Pick the largest price size that fits next to the unit.
+  let size = 56;
+  layerCtx.font = `700 ${size}px ${F}`;
+  const unitW = () => { layerCtx.font = `700 16px ${F}`; return unit ? layerCtx.measureText(unit).width + 6 : 0; };
+  const uw = unitW();
+  while (size > 20) {
+    layerCtx.font = `700 ${size}px ${F}`;
+    if (layerCtx.measureText(price).width + uw <= W - 16) break;
+    size -= 2;
+  }
+  layerCtx.font = `700 ${size}px ${F}`;
+  const pw = layerCtx.measureText(price).width;
+  const py = 40;
+  L.push({ type: 'text', text: price, x: 8, y: py, size, bold: true, font: F, color: style === 'black' ? '#ff0000' : '#000000' });
+  if (unit) L.push({ type: 'text', text: unit, x: 8 + pw + 6, y: py + size - 20, size: 16, bold: true, font: F, color: '#000000' });
+  const by = py + size + 6;
+  if (old) L.push({ type: 'text', text: old, x: 8, y: Math.min(by, H - 34), size: 15, bold: false, font: F, color: '#ff0000', strike: true });
+  if (note) L.push({ type: 'text', text: note, x: W - 8, y: H - 17, size: 13, bold: false, font: F, color: '#000000', align: 'right' });
+  ed.layers = L;
+  selectLayer(-1);
+  render();
+}
+
+/* ---------- canvas -> device bytes ----------
+ * 2.13"/2.9" firmware stores the frame column-first: columns from x = W-1
+ * down to 0, 128 vertical pixels per column packed MSB-first (16 bytes/column).
+ * Black plane: bit 1 = not black. Red plane: bit 0 = red, 1 = not red. */
+function planes(ctx, flip) {
+  const src = ctx.getImageData(0, 0, W, H).data;
+  const px = (x, y) => {
+    if (flip) { x = W - 1 - x; y = H - 1 - y; }
+    return (y * W + x) * 4;
+  };
+  const black = new Uint8Array(W * H / 8);
+  const red = new Uint8Array(W * H / 8);
+  let n = 0;
+  for (let x = W - 1; x >= 0; x--) {
+    for (let y = 0; y < H; y += 8) {
+      let bb = 0, rb = 0;
+      for (let k = 0; k < 8; k++) {
+        const i = px(x, y + k);
+        const r = src[i], g = src[i + 1], b = src[i + 2];
+        const isRed = r > 0 && g === 0 && b === 0;
+        const isWhite = r > 0 && g > 0 && b > 0;
+        bb = (bb << 1) | (isWhite ? 1 : 0);
+        rb = (rb << 1) | (isRed ? 0 : 1);
+      }
+      black[n] = bb; red[n] = rb; n++;
+    }
+  }
+  return { black, red };
+}
+
+async function sendPlane(data, isBlack, p0, p1) {
+  const size = state.chunk;
+  const total = Math.ceil(data.length / size);
+  for (let off = 0, part = 0; off < data.length; off += size, part++) {
+    const chunk = data.subarray(off, off + size);
+    const pkt = new Uint8Array(2 + chunk.length);
+    pkt[0] = CMD.WRITE_IMAGE;
+    pkt[1] = (off === 0 ? 0x00 : 0xf0) | (isBlack ? 0x0f : 0x00);
+    pkt.set(chunk, 2);
+    await send(pkt, true);
+    const pct = p0 + ((part + 1) / total) * (p1 - p0);
+    $('sendProgress').value = pct;
+    setStatus('sendStatus', `Đang gửi lớp ${isBlack ? 'đen' : 'đỏ'}: ${part + 1}/${total}`);
+    await sleepMs(8);
+  }
+  log(`Đã gửi lớp ${isBlack ? 'đen' : 'đỏ'}: ${data.length} byte, ${total} gói`);
+}
+
+async function uploadCanvas(ctx) {
+  if (state.modelId != null && state.modelId !== 2) {
+    throw new Error(`Thiết bị báo model ${state.modelId}, không phải màn 2.13" (model 2).`);
+  }
+  const t0 = performance.now();
+  const { black, red } = planes(ctx, $('flip180').checked);
+  $('sendProgress').value = 0;
+  setStatus('sendStatus', 'Đang khởi tạo màn hình…');
+  await send([CMD.INIT]);
+  await sleepMs(100);
+  await sendPlane(black, true, 0, 48);
+  await sendPlane(red, false, 48, 95);
+  setStatus('sendStatus', 'Đang refresh màn hình…');
+  await send([CMD.REFRESH]);
+  state.mode = 0;
+  refreshInfo();
+  $('sendProgress').value = 100;
+  const s = ((performance.now() - t0) / 1000).toFixed(1);
+  setStatus('sendStatus', `Đã gửi xong trong ${s}s. Màn e-paper cần ~15–20s để refresh 3 màu.`, 'ok');
+}
+
+/* ---------- image loading ---------- */
+function loadImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    ed.img = img; ed.rot = 0; ed.zoom = 1; ed.ox = 0; ed.oy = 0; ed.fit = 'fill';
+    $('zoom').value = 100; $('zoomV').textContent = '100%';
+    log(`Đã nạp ảnh ${img.naturalWidth}×${img.naturalHeight}`);
+    render();
+  };
+  img.onerror = () => log('Không đọc được ảnh.', 'log-err');
+  img.src = url;
+}
+
+/* ---------- pointer interaction on preview ---------- */
+function canvasPoint(ev) {
+  const r = out.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) * W / r.width, y: (ev.clientY - r.top) * H / r.height };
+}
+let drag = null;
+out.addEventListener('pointerdown', ev => {
+  const p = canvasPoint(ev);
+  if (ed.placing) {
+    const L = textFromForm(Math.round(p.x), Math.round(p.y));
+    if (L.text) { ed.layers.push(L); selectLayer(ed.layers.length - 1); }
+    ed.placing = false; out.classList.remove('placing');
+    render();
+    return;
+  }
+  let hit = -1;
+  for (let i = ed.layers.length - 1; i >= 0; i--) {
+    const b = layerBox(ed.layers[i]);
+    // Full-width background bands shouldn't steal drags from text above them.
+    if (ed.layers[i].type === 'rect' && b.w >= W - 1) continue;
+    if (p.x >= b.x - 3 && p.x <= b.x + b.w + 3 && p.y >= b.y - 3 && p.y <= b.y + b.h + 3) { hit = i; break; }
+  }
+  if (hit >= 0) selectLayer(hit);
+  const L = ed.layers[hit];
+  drag = { p, layer: L, lx: L?.x, ly: L?.y, ox: ed.ox, oy: ed.oy };
+  if (!L && !ed.img) { drag = null; return; }
+  out.setPointerCapture(ev.pointerId);
+  out.classList.add('dragging');
+});
+out.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const p = canvasPoint(ev);
+  const dx = p.x - drag.p.x, dy = p.y - drag.p.y;
+  if (drag.layer) { drag.layer.x = Math.round(drag.lx + dx); drag.layer.y = Math.round(drag.ly + dy); }
+  else { ed.ox = drag.ox + dx; ed.oy = drag.oy + dy; }
+  render();
+});
+const endDrag = () => { drag = null; out.classList.remove('dragging'); };
+out.addEventListener('pointerup', endDrag);
+out.addEventListener('pointercancel', endDrag);
+out.addEventListener('wheel', ev => {
+  if (!ed.img) return;
+  ev.preventDefault();
+  ed.zoom = Math.max(0.1, Math.min(4, ed.zoom * (ev.deltaY < 0 ? 1.08 : 1 / 1.08)));
+  $('zoom').value = Math.round(ed.zoom * 100);
+  $('zoomV').textContent = $('zoom').value + '%';
+  render();
+}, { passive: false });
+
+/* ================================================================
+ * Wiring
+ * ================================================================ */
+function initTheme() {
+  const saved = store.get('theme', null);
+  if (saved) document.documentElement.dataset.theme = saved;
+  $('btnTheme').onclick = () => {
+    const dark = document.documentElement.dataset.theme
+      ? document.documentElement.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches;
+    const next = dark ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    store.set('theme', next);
+  };
+}
+
+function initTabs() {
+  const show = name => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.panel').forEach(p => { p.hidden = p.dataset.panel !== name; });
+    store.set('tab', name);
+  };
+  document.querySelectorAll('.tab').forEach(t => { t.onclick = () => show(t.dataset.tab); });
+  show(store.get('tab', 'device'));
+  return show;
+}
+
+function bindSlider(id, fmt = v => v) {
+  const el = $(id), o = $(id + 'V');
+  const upd = () => { o.textContent = fmt(el.value); };
+  el.addEventListener('input', () => { upd(); render(); });
+  upd();
+}
+
+function init() {
+  initTheme();
+  const showTab = initTabs();
+  if (!navigator.bluetooth) {
+    $('noBle').hidden = false;
+    $('btnConnect').disabled = true;
+  }
+
+  $('tzHours').value = store.get('tz', Math.round(-new Date().getTimezoneOffset() / 60));
+  $('tzHours').onchange = () => store.set('tz', tzHours());
+
+  $('btnConnect').onclick = scanAndConnect;
+  $('btnReconnect').onclick = async () => {
+    if (!state.device) return;
+    try { state.device.gatt.disconnect(); } catch { /* ignore */ }
+    resetConn();
+    await sleepMs(300);
+    await connect();
+  };
+  $('btnClearLog').onclick = () => { $('log').textContent = ''; };
+
+  document.querySelectorAll('.mode-btns button').forEach(b => {
+    b.onclick = () => {
+      const m = Number(b.dataset.mode);
+      if (m === 0) {
+        showTab('image');
+        log('Chế độ Ảnh sẽ tự bật sau khi gửi ảnh lên màn hình.');
+        return;
+      }
+      guarded(() => sendTimeAndMode(m), 'timeStatus');
+    };
+  });
+  $('btnSyncTime').onclick = () => guarded(() => sendTimeAndMode(state.mode), 'timeStatus');
+  $('weekStart').onchange = () => guarded(async () => {
+    const v = Number($('weekStart').value);
+    await send([CMD.WEEK_START, v]);
+    setStatus('timeStatus', `Đã gửi ngày đầu tuần: ${v ? 'Thứ 2' : 'Chủ Nhật'} (áp dụng ở lần refresh tiếp theo).`, 'ok');
+  }, 'timeStatus');
+
+  $('btnSleepRead').onclick = () => guarded(readSleep, 'sleepStatus');
+  $('btnSleepOn').onclick = () => guarded(() => writeSleep(true), 'sleepStatus');
+  $('btnSleepOff').onclick = () => guarded(() => writeSleep(false), 'sleepStatus');
+
+  $('btnActQuery').onclick = () => guarded(async () => {
+    setStatus('actStatus', 'Đang hỏi thiết bị…');
+    const r = waitFor(d => d[0] === CMD.ACTIVATE || new TextDecoder().decode(d).startsWith('activation='), 1500);
+    await send([CMD.ACTIVATE]);
+    if (!await r) setStatus('actStatus', 'Không có phản hồi — firmware mở, không cần kích hoạt.', 'ok');
+  }, 'actStatus');
+  $('btnActivate').onclick = () => guarded(async () => {
+    const raw = $('actCode').value.replace(/[^0-9a-f]/gi, '');
+    const code = raw ? parseInt(raw, 16) & 0xffff : legacyCode();
+    if (code == null || Number.isNaN(code)) throw new Error('Tên Bluetooth không kết thúc bằng 4 ký tự hex; hãy nhập mã thủ công.');
+    setStatus('actStatus', `Đang gửi mã ${code.toString(16).padStart(4, '0')}…`);
+    const r = waitFor(d => new TextDecoder().decode(d).startsWith('activation=') || d[0] === CMD.ACTIVATE, 8000);
+    await send([CMD.ACTIVATE, (code >>> 8) & 0xff, code & 0xff]);
+    if (!await r) setStatus('actStatus', 'Hết thời gian chờ phản hồi kích hoạt.', 'err');
+  }, 'actStatus');
+
+  $('btnRaw').onclick = () => guarded(async () => {
+    const h = $('rawHex').value.replace(/[^0-9a-f]/gi, '');
+    if (!h || h.length % 2) throw new Error('Chuỗi hex không hợp lệ.');
+    await send(h.match(/../g).map(x => parseInt(x, 16)));
+  });
+
+  // Image editor
+  $('file').onchange = e => loadImageFile(e.target.files[0]);
+  const drop = $('drop');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); loadImageFile(e.dataTransfer.files[0]); });
+  document.addEventListener('paste', e => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (item) { loadImageFile(item.getAsFile()); showTab('image'); }
+  });
+  document.querySelectorAll('[data-fit]').forEach(b => {
+    b.onclick = () => { ed.fit = b.dataset.fit; ed.zoom = 1; ed.ox = 0; ed.oy = 0; $('zoom').value = 100; $('zoomV').textContent = '100%'; render(); };
+  });
+  $('btnRotL').onclick = () => { ed.rot = (ed.rot + 270) % 360; render(); };
+  $('btnRotR').onclick = () => { ed.rot = (ed.rot + 90) % 360; render(); };
+  $('btnCenter').onclick = () => { ed.ox = 0; ed.oy = 0; render(); };
+  $('btnRemoveImg').onclick = () => { ed.img = null; render(); };
+  $('zoom').addEventListener('input', () => { ed.zoom = Number($('zoom').value) / 100; });
+  bindSlider('zoom', v => v + '%');
+  bindSlider('bright');
+  bindSlider('contrast');
+  bindSlider('thresh');
+  bindSlider('redSens');
+  ['palette', 'dither'].forEach(id => $(id).addEventListener('change', render));
+
+  $('btnAddText').onclick = () => {
+    if (!$('txt').value.trim()) { $('txt').focus(); return; }
+    ed.placing = true; out.classList.add('placing');
+    log('Bấm vào vị trí trên hình xem trước để đặt chữ.');
+  };
+  $('btnUpdText').onclick = () => {
+    const L = ed.layers[ed.sel];
+    if (!L || L.type !== 'text') return;
+    Object.assign(L, textFromForm(L.x, L.y), { align: L.align, strike: L.strike });
+    renderLayerList(); render();
+  };
+  $('btnTemplate').onclick = applyTemplate;
+
+  $('btnSend').onclick = () => guarded(async () => {
+    renderNow();
+    await uploadCanvas(outCtx);
+  }, 'sendStatus');
+  $('btnClearScreen').onclick = () => guarded(async () => {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+    await uploadCanvas(x);
+  }, 'sendStatus');
+  $('btnDownload').onclick = () => {
+    renderNow();
+    const a = document.createElement('a');
+    a.download = 'aesl0213c.png';
+    a.href = out.toDataURL('image/png');
+    a.click();
+  };
+
+  applyTemplate();
+  refreshInfo();
+  log('Sẵn sàng. Bấm "Quét & kết nối" và chọn nhãn AESL0213C.');
+}
+init();
+</script>
+</body>
+</html>
