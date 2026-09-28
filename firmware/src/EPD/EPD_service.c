@@ -66,7 +66,7 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
         mv = EPD_ReadVoltage();
     }
 
-    uint8_t full_every = p_epd->config.full_every == 0xFF ? 20 : p_epd->config.full_every;
+    uint8_t full_every = p_epd->config.full_every;
     bool full = force_full || p_epd->config.fast_refresh == 0 || m_shown.screen != scr ||
                 m_shown.partials >= full_every;
     if (full) {
@@ -308,6 +308,11 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                 else
                     p_epd->config.full_every = p_data[2] ? p_data[2] : 1;
                 epd_config_write(&p_epd->config);
+            } else if (length > 2 && p_data[1] == 0x03 && p_data[2] <= 6) {
+                p_epd->config.x_offset = p_data[2];
+                SSD1680_SetXOffset(p_data[2]);
+                epd_config_write(&p_epd->config);
+                m_shown.screen = SCR_NONE;  // next update redraws everything at the new position
             }
             break;
 
@@ -352,7 +357,7 @@ static void on_write(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
         if (ble_srv_is_notification_enabled(p_evt_write->data)) {
             NRF_LOG_DEBUG("notification enabled\n");
             p_epd->is_notification_enabled = true;
-            static uint16_t length = sizeof(epd_config_t);
+            static uint16_t length = EPD_CONFIG_NOTIFY_SIZE;
             NRF_LOG_DEBUG("send epd config\n");
             uint32_t err_code = ble_epd_string_send(p_epd, (uint8_t*)&p_epd->config, length);
             if (err_code != NRF_ERROR_INVALID_STATE) APP_ERROR_CHECK(err_code);
@@ -478,6 +483,15 @@ uint32_t ble_epd_init(ble_epd_t* p_epd) {
     }
 
     p_epd->config.panel = 0x21;
+    if (p_epd->config.cfg_magic != CFG_MAGIC) {
+        // First boot after the stock firmware: its record carries other data in these bytes.
+        p_epd->config.cfg_magic = CFG_MAGIC;
+        p_epd->config.fast_refresh = 1;
+        p_epd->config.full_every = 20;
+        p_epd->config.x_offset = 1;
+        epd_config_write(&p_epd->config);
+    }
+    SSD1680_SetXOffset(p_epd->config.x_offset);
     if (p_epd->config.model_id != SSD1680_213_BWR && p_epd->config.model_id != SSD1680_213_BW)
         p_epd->config.model_id = SSD1680_213_BWR;
 

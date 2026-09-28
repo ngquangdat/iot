@@ -7,6 +7,12 @@
 // maps directly onto this layout with entry mode 0x03.
 
 #define GATES 250
+#define SOURCE_BYTES 22  // SSD1680 has 176 sources
+
+// The AESL0213C glass starts at source 8, so the 128-pixel window is shifted by a byte.
+static uint8_t m_x_offset = 1;
+
+void SSD1680_SetXOffset(uint8_t bytes) { m_x_offset = bytes; }
 
 bool SSD16xx_ReadBusy(epd_model_t* epd) { return EPD_ReadBusy(); }
 
@@ -27,9 +33,9 @@ int8_t SSD16xx_ReadTemp(epd_model_t* epd) {
 static void SSD16xx_SetWindow(epd_model_t* epd) {
     uint16_t last = epd->height - 1;
     EPD_Write(SSD16xx_ENTRY_MODE, 0x03);  // x increase, y increase
-    EPD_Write(SSD16xx_RAM_XPOS, 0x00, (epd->width / 8) - 1);
+    EPD_Write(SSD16xx_RAM_XPOS, m_x_offset, m_x_offset + (epd->width / 8) - 1);
     EPD_Write(SSD16xx_RAM_YPOS, 0x00, 0x00, last % 256, last / 256);
-    EPD_Write(SSD16xx_RAM_XCOUNT, 0x00);
+    EPD_Write(SSD16xx_RAM_XCOUNT, m_x_offset);
     EPD_Write(SSD16xx_RAM_YCOUNT, 0x00, 0x00);
 }
 
@@ -42,6 +48,17 @@ void SSD16xx_Init(epd_model_t* epd) {
     EPD_Write(SSD16xx_GDO_CTR, (GATES - 1) % 256, (GATES - 1) / 256, 0x00);
     EPD_Write(SSD16xx_BORDER_CTRL, 0x05);
     EPD_Write(SSD16xx_TSENSOR_CTRL, 0x80);
+
+    // Blank all 176 sources: columns outside our window would otherwise show leftover RAM.
+    EPD_Write(SSD16xx_ENTRY_MODE, 0x03);
+    EPD_Write(SSD16xx_RAM_XPOS, 0x00, SOURCE_BYTES - 1);
+    EPD_Write(SSD16xx_RAM_YPOS, 0x00, 0x00, (GATES - 1) % 256, (GATES - 1) / 256);
+    EPD_Write(SSD16xx_RAM_XCOUNT, 0x00);
+    EPD_Write(SSD16xx_RAM_YCOUNT, 0x00, 0x00);
+    EPD_FillRAM(SSD16xx_WRITE_RAM1, 0xFF, SOURCE_BYTES * GATES);
+    EPD_Write(SSD16xx_RAM_XCOUNT, 0x00);
+    EPD_Write(SSD16xx_RAM_YCOUNT, 0x00, 0x00);
+    EPD_FillRAM(SSD16xx_WRITE_RAM2, 0xFF, SOURCE_BYTES * GATES);
 
     SSD16xx_SetWindow(epd);
 }

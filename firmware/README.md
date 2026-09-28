@@ -3,8 +3,8 @@
 Firmware mở rộng từ [tsl0922/EPD-nRF5](https://github.com/tsl0922/EPD-nRF5) (GPL-3.0, commit `7e31961`)
 cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×250, đen/trắng/đỏ).
 
-> ⚠️ **Chưa thử trên phần cứng thật.** Đã build, kiểm tra kích thước/bố cục bộ nhớ, chữ ký gói OTA và
-> xem trước giao diện trên máy tính (cùng mã C). Nạp là thay thế firmware hiện tại, không quay lại được.
+> Đã nạp OTA thành công trên một nhãn AESL0213C thật (bản 1000). Bản 1001 sửa căn dọc và bật refresh nhanh
+> mặc định (bản 1000 đọc nhầm dữ liệu lịch ngủ của firmware gốc thành "tắt refresh nhanh").
 
 ## Có gì mới
 - **Lệnh chỉ đường `0x40`**: web gửi vài chục byte (icon, khoảng cách, tên đường, còn lại, giờ đến),
@@ -48,6 +48,7 @@ make ota                     # cần nrfutil 6.x: pip install --ignore-requires-
 | `41 00` | dừng chỉ đường, quay lại đồng hồ/lịch |
 | `41 01 xx` | refresh nhanh bật (`01`) / tắt (`00`) |
 | `41 02 nn` | refresh toàn màn sau `nn` lần refresh nhanh |
+| `41 03 oo` | căn dọc: cột RAM bắt đầu ở byte `oo` (mặc định 1 = source 8, khớp kính AESL0213C) |
 
 Icon: 0 thẳng, 1 trái, 2 phải, 3 chếch trái, 4 chếch phải, 5 gắt trái, 6 gắt phải, 7 nhánh trái,
 8 nhánh phải, 9 quay đầu trái, 10 quay đầu phải, 11 vòng xuyến, 12 nhập làn, 13 đích.

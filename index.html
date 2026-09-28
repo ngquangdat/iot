@@ -458,6 +458,17 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
             <div class="field"><label for="fwFullEvery">Refresh toàn màn sau mỗi … lần cập nhật nhanh</label><input id="fwFullEvery" type="number" min="1" max="100" value="20" style="width:100px"></div>
             <button id="btnFwApply" type="button">Lưu vào nhãn</button>
           </div>
+          <div class="row" style="margin-top:10px">
+            <div class="field">
+              <label for="fwOffset">Căn dọc hình (nếu mép trên bị che hoặc mép dưới có sọc)</label>
+              <select id="fwOffset">
+                <option value="0">Dịch xuống 8 điểm ảnh</option>
+                <option value="1" selected>Chuẩn</option>
+                <option value="2">Dịch lên 8 điểm ảnh</option>
+              </select>
+            </div>
+            <button id="btnFwOffset" type="button">Áp dụng</button>
+          </div>
           <div id="fwStatus" class="status" role="status"></div>
         </div>
 
@@ -479,7 +490,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
               <dt>fb e sh sm eh em</dt><dd>Đặt lịch ngủ</dd>
               <dt>a0 [cc cc]</dt><dd>Truy vấn / gửi mã kích hoạt</dd>
               <dt>40 …</dt><dd>Firmware mới: màn chỉ đường (cờ, icon, khoảng cách, còn lại, giờ đến, chữ)</dd>
-              <dt>41 00 / 41 01 xx / 41 02 nn</dt><dd>Firmware mới: dừng chỉ đường / bật-tắt refresh nhanh / số lần giữa 2 lần refresh toàn màn</dd>
+              <dt>41 00 / 41 01 xx / 41 02 nn / 41 03 oo</dt><dd>Firmware mới: dừng chỉ đường / bật-tắt refresh nhanh / số lần giữa 2 lần refresh toàn màn / căn dọc hình (byte)</dd>
               <dt>00 mosi sclk cs dc rst busy bs</dt><dd>Đặt chân màn hình (nếu màn không hiện sau khi nạp firmware)</dd>
             </dl>
           </details>
@@ -660,7 +671,7 @@ function onNotify(ev) {
     return;
   }
   // Config packet: byte 7 = model id, 11 = mode, 12 = week start, 13 = panel profile
-  if (d.length >= 8 && d.length <= 22 && [1, 2, 3, 4, 5, 7].includes(d[7])) {
+  if (d.length >= 8 && d.length <= 32 && [1, 2, 3, 4, 5, 7, 0x20].includes(d[7])) {
     state.modelId = d[7];
     if (d.length > 11) state.mode = d[11];
     if (d.length > 12 && d[12] <= 1) $('weekStart').value = String(d[12]);
@@ -1862,6 +1873,11 @@ function init() {
     await send([0x41, 0x01, $('fwFast').checked ? 1 : 0]);
     await send([0x41, 0x02, n]);
     setStatus('fwStatus', 'Đã lưu cấu hình refresh vào nhãn.', 'ok');
+  }, 'fwStatus');
+
+  $('btnFwOffset').onclick = () => guarded(async () => {
+    await send([0x41, 0x03, Number($('fwOffset').value)]);
+    setStatus('fwStatus', 'Đã lưu. Lần cập nhật màn hình tiếp theo sẽ vẽ ở vị trí mới (bấm Đồng hồ để thử).', 'ok');
   }, 'fwStatus');
 
   $('btnRaw').onclick = () => guarded(async () => {

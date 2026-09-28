@@ -18,9 +18,15 @@ typedef struct {
     uint8_t display_mode;
     uint8_t week_start;
     uint8_t panel;         // 0x21 = 2.13" (reported to the web tools like the stock firmware)
-    uint8_t fast_refresh;  // 0: always full refresh, otherwise partial updates for clock/nav (0xFF = on)
-    uint8_t full_every;    // full refresh after this many partial updates (0xFF = 20)
+    uint8_t reserved[6];   // used by the stock firmware (sleep schedule); left untouched
+    uint8_t cfg_magic;     // CFG_MAGIC once the fields below hold our own values
+    uint8_t fast_refresh;  // 0: always full refresh, otherwise partial updates for clock/nav
+    uint8_t full_every;    // full refresh after this many partial updates
+    uint8_t x_offset;      // RAM column offset in bytes (the glass starts at source 8*x_offset)
 } epd_config_t;
+
+#define CFG_MAGIC 0xA5
+#define EPD_CONFIG_NOTIFY_SIZE 14  // what the web tools expect on connect
 
 #define EPD_CONFIG_SIZE (sizeof(epd_config_t) / sizeof(uint8_t))
 
