@@ -485,6 +485,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
           <dt>Panel</dt><dd id="infoPanel">—</dd>
           <dt>Chế độ</dt><dd id="infoMode">—</dd>
           <dt>Gói ảnh</dt><dd id="infoChunk">128 byte</dd>
+          <dt>Chân (pin)</dt><dd id="infoPins">—</dd>
         </dl>
       </div>
       <div class="card">
@@ -559,6 +560,7 @@ function refreshInfo() {
   $('infoPanel').textContent = state.panel === 0x21 ? '2.13" (0x21)' : (state.panel != null ? '0x' + state.panel.toString(16) : (state.modelId ? '—' : '—'));
   $('infoMode').textContent = state.ch ? (MODE_NAMES[state.mode] ?? state.mode) : '—';
   $('infoChunk').textContent = state.chunk + ' byte';
+  $('infoPins').textContent = state.configHex || '—';
   document.querySelectorAll('.mode-btns button').forEach(b => {
     const m = Number(b.dataset.mode);
     b.classList.toggle('active', !!state.ch && (m === state.mode || (m === 2 && state.mode === 3)));
@@ -649,6 +651,9 @@ function onNotify(ev) {
     state.panel = d.length > 13 ? d[13] : null;
     log(`← cấu hình: model ${state.modelId}, chế độ ${state.mode}` +
         (state.panel === 0x21 ? ', panel 2.13"' : ''), 'log-rx');
+    // Raw config: pin map (MOSI, SCLK, CS, DC, RST, BUSY, BS, model, WAKEUP, LED, EN, ...) — needed for custom firmware.
+    state.configHex = hex(d);
+    log('← cấu hình thô: ' + state.configHex, 'log-rx');
     if (state.modelId !== 2) log(`Cảnh báo: model ${state.modelId} không phải màn 2.13"/2.9" (model 2). Kiểm tra lại thiết bị.`, 'log-err');
     refreshInfo();
     return;
@@ -710,7 +715,7 @@ async function connect() {
 
 function resetConn() {
   state.server = null; state.ch = null;
-  state.modelId = null; state.panel = null; state.fw = 0; state.chunk = 128;
+  state.modelId = null; state.panel = null; state.fw = 0; state.chunk = 128; state.configHex = null;
   state.waiters.forEach(w => { clearTimeout(w.timer); w.resolve(null); });
   state.waiters = [];
   setConn('Chưa kết nối');
