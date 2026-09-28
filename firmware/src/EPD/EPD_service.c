@@ -78,9 +78,9 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
         mv = EPD_ReadVoltage();
     }
 
-    uint8_t full_every = p_epd->config.full_every;
+    uint8_t full_every = p_epd->settings.full_every;
     const char* why = force_full                      ? "forced"
-                      : p_epd->config.fast_refresh == 0 ? "fast-off"
+                      : p_epd->settings.fast_refresh == 0 ? "fast-off"
                       : m_shown.screen != scr           ? "new-screen"
                       : m_shown.partials >= full_every  ? "periodic"
                                                         : "";
@@ -96,7 +96,7 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
         SSD1680_WritePlane(epd, false, gui_buffer(), GUI_BUF_SIZE);
         render(scr, nav, ts, mv, temp);
         SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
-        SSD1680_RefreshPartial(epd, p_epd->config.fast_variant == 0xFF ? 0 : p_epd->config.fast_variant);
+        SSD1680_RefreshPartial(epd, p_epd->settings.fast_variant);
         m_shown.partials++;
     }
     m_shown.screen = scr;
@@ -215,8 +215,8 @@ static void epd_send_mtu(ble_epd_t* p_epd) {
     char buf[40] = {0};
     snprintf(buf, sizeof(buf), "mtu=%d nav=1", p_epd->max_data_len);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
-    snprintf(buf, sizeof(buf), "cfg fast=%d every=%d off=%d var=%d", p_epd->config.fast_refresh,
-             p_epd->config.full_every, p_epd->config.x_offset, p_epd->config.fast_variant);
+    snprintf(buf, sizeof(buf), "cfg fast=%d every=%d off=%d var=%d", p_epd->settings.fast_refresh,
+             p_epd->settings.full_every, p_epd->settings.x_offset, p_epd->settings.fast_variant);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
 }
 
@@ -324,17 +324,17 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
                 epd_nav_stop(p_epd);
             } else if (length > 2 && (p_data[1] == 0x01 || p_data[1] == 0x02)) {
                 if (p_data[1] == 0x01)
-                    p_epd->config.fast_refresh = p_data[2];
+                    p_epd->settings.fast_refresh = p_data[2] ? 1 : 0;
                 else
-                    p_epd->config.full_every = p_data[2] ? p_data[2] : 1;
-                epd_config_write(&p_epd->config);
+                    p_epd->settings.full_every = p_data[2] == 0 ? 1 : (p_data[2] > 100 ? 100 : p_data[2]);
+                epd_settings_write(&p_epd->settings);
             } else if (length > 2 && p_data[1] == 0x04 && p_data[2] <= 2) {
-                p_epd->config.fast_variant = p_data[2];
-                epd_config_write(&p_epd->config);
+                p_epd->settings.fast_variant = p_data[2];
+                epd_settings_write(&p_epd->settings);
             } else if (length > 2 && p_data[1] == 0x03 && p_data[2] <= 6) {
-                p_epd->config.x_offset = p_data[2];
+                p_epd->settings.x_offset = p_data[2];
                 SSD1680_SetXOffset(p_data[2]);
-                epd_config_write(&p_epd->config);
+                epd_settings_write(&p_epd->settings);
                 m_shown.screen = SCR_NONE;  // next update redraws everything at the new position
             }
             break;
@@ -506,15 +506,8 @@ uint32_t ble_epd_init(ble_epd_t* p_epd) {
     }
 
     p_epd->config.panel = 0x21;
-    if (p_epd->config.cfg_magic != CFG_MAGIC) {
-        // First boot after the stock firmware: its record carries other data in these bytes.
-        p_epd->config.cfg_magic = CFG_MAGIC;
-        p_epd->config.fast_refresh = 1;
-        p_epd->config.full_every = 20;
-        p_epd->config.x_offset = 1;
-        epd_config_write(&p_epd->config);
-    }
-    SSD1680_SetXOffset(p_epd->config.x_offset);
+    epd_settings_read(&p_epd->settings);
+    SSD1680_SetXOffset(p_epd->settings.x_offset);
     if (p_epd->config.model_id != SSD1680_213_BWR && p_epd->config.model_id != SSD1680_213_BW)
         p_epd->config.model_id = SSD1680_213_BWR;
 

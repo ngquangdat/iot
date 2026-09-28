@@ -5,7 +5,7 @@ UP      := upstream
 SDK     := $(UP)/SDK/17.1.0_ddde560
 BUILD   := build
 TARGET  := aesl0213c
-APP_VER ?= 1002
+APP_VER ?= 1003
 
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
