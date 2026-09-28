@@ -60,5 +60,7 @@ int main(void) {
     dump("build/clock.pbm");
     gui_draw_date(1790000000 + 7 * 3600, 2950, 27);
     dump("build/date.pbm");
+    gui_draw_clock(1790000000 + 7 * 3600, 2600, 24);
+    dump("build/clock_low.pbm");
     return 0;
 }

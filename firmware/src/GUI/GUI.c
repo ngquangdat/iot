@@ -503,17 +503,36 @@ static const char* const weekdays[] = {
     "Th\xE1\xBB\xA9 B\xE1\xBA\xA3y",                                        // Thứ Bảy
 };
 
+// Battery level from the supply voltage: the stock EPD-nRF5 curve for a 3 V lithium cell.
+static uint8_t battery_percent(uint16_t mv) {
+    if (mv >= 3000) return 100;
+    if (mv > 2785) return 28 + (uint32_t)(mv - 2785) * 72 / 215;
+    if (mv > 2392) return 4 + (uint32_t)(mv - 2392) * 24 / 393;
+    if (mv > 1998) return (uint32_t)(mv - 1998) * 4 / 394;
+    return 0;
+}
+
+// Bottom row: temperature on the left, battery icon with percentage on the right.
 static void draw_status(uint16_t mv, int8_t temp) {
     char buf[12], *p = buf;
     if (temp < 0) *p++ = '-';
     p = put_uint(p, temp < 0 ? -temp : temp, 1);
     put_str(p, "\xC2\xB0" "C");
     draw_text(&font_small, 6, 120, buf, strlen(buf));
-    p = put_uint(buf, mv / 1000, 1);
-    *p++ = '.';
-    p = put_uint(p, mv % 1000 / 10, 2);
-    put_str(p, "V");
-    draw_text_right(&font_small, 244, 120, buf);
+
+    uint8_t pct = battery_percent(mv);
+    const int bx = 219, by = 110, bw = 22, bh = 11;  // body; the terminal nub sits right of it
+    fill_rect(bx, by, bw, 1);
+    fill_rect(bx, by + bh - 1, bw, 1);
+    fill_rect(bx, by, 1, bh);
+    fill_rect(bx + bw - 1, by, 1, bh);
+    fill_rect(bx + bw, by + 3, 2, bh - 6);
+    int fill = (bw - 4) * pct / 100;
+    if (pct > 0 && fill == 0) fill = 1;
+    fill_rect(bx + 2, by + 2, fill, bh - 4);
+    p = put_uint(buf, pct, 1);
+    put_str(p, "%");
+    draw_text_right(&font_small, bx - 4, 120, buf);
 }
 
 static bool time_synced(uint32_t ts) { return ts > 1704067200; }  // after 2024-01-01
