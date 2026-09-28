@@ -13,7 +13,7 @@ SIZE    := arm-none-eabi-size
 
 SRC_APP := src/main.c \
   src/EPD/EPD_config.c src/EPD/EPD_driver.c src/EPD/EPD_service.c src/EPD/SSD16xx.c \
-  src/GUI/Adafruit_GFX.c src/GUI/GUI.c src/GUI/Lunar.c src/GUI/fonts.c src/GUI/u8g2_font.c
+  src/GUI/GUI.c src/GUI/font_data.c
 
 SRC_SDK := $(addprefix $(SDK)/, \
   components/ble/ble_advertising/ble_advertising.c \

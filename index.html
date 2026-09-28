@@ -435,7 +435,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
           <div class="row" style="margin-top:10px">
             <div class="field"><label for="navMinGap">Khoảng cách tối thiểu giữa 2 lần gửi (giây)</label><input id="navMinGap" type="number" min="5" max="300" value="25" style="width:120px"></div>
           </div>
-          <p class="hint">Firmware hiện tại refresh toàn màn 3 màu mất khoảng 15–20 giây, nên web chỉ gửi khi sang hướng rẽ mới hoặc khi vượt các mốc 2 km, 1 km, 500 m, 300 m, 150 m, 50 m.</p>
+          <p class="hint">Với firmware gốc, mỗi lần gửi là một lần refresh 3 màu (~15–20 giây), nên web chỉ gửi khi sang hướng rẽ mới hoặc khi vượt các mốc 2 km, 1 km, 500 m, 300 m, 150 m, 50 m. Với firmware AESL0213C mới (có <code>nav=1</code>), web chỉ gửi lệnh nhỏ và nhãn tự vẽ, cập nhật mỗi vài giây.</p>
         </div>
       </section>
 
@@ -451,6 +451,16 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
           </div>
           <div id="actStatus" class="status" role="status"></div>
         </div>
+        <div class="card" id="fwNavCard" hidden>
+          <h2>Firmware chỉ đường</h2>
+          <label style="display:block"><input id="fwFast" type="checkbox" checked> Refresh nhanh (chỉ đen trắng, thử nghiệm)</label>
+          <div class="row" style="margin-top:10px">
+            <div class="field"><label for="fwFullEvery">Refresh toàn màn sau mỗi … lần cập nhật nhanh</label><input id="fwFullEvery" type="number" min="1" max="100" value="20" style="width:100px"></div>
+            <button id="btnFwApply" type="button">Lưu vào nhãn</button>
+          </div>
+          <div id="fwStatus" class="status" role="status"></div>
+        </div>
+
         <div class="card">
           <h2>Gửi lệnh thô</h2>
           <div class="row">
@@ -468,6 +478,9 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px 
               <dt>fb ff</dt><dd>Đọc lịch ngủ</dd>
               <dt>fb e sh sm eh em</dt><dd>Đặt lịch ngủ</dd>
               <dt>a0 [cc cc]</dt><dd>Truy vấn / gửi mã kích hoạt</dd>
+              <dt>40 …</dt><dd>Firmware mới: màn chỉ đường (cờ, icon, khoảng cách, còn lại, giờ đến, chữ)</dd>
+              <dt>41 00 / 41 01 xx / 41 02 nn</dt><dd>Firmware mới: dừng chỉ đường / bật-tắt refresh nhanh / số lần giữa 2 lần refresh toàn màn</dd>
+              <dt>00 mosi sclk cs dc rst busy bs</dt><dd>Đặt chân màn hình (nếu màn không hiện sau khi nạp firmware)</dd>
             </dl>
           </details>
           <label style="display:block;margin-top:12px"><input id="flip180" type="checkbox"> Xoay ảnh 180° khi gửi (nếu màn lắp ngược)</label>
@@ -561,6 +574,7 @@ function refreshInfo() {
   $('infoMode').textContent = state.ch ? (MODE_NAMES[state.mode] ?? state.mode) : '—';
   $('infoChunk').textContent = state.chunk + ' byte';
   $('infoPins').textContent = state.configHex || '—';
+  $('fwNavCard').hidden = !state.navFw;
   document.querySelectorAll('.mode-btns button').forEach(b => {
     const m = Number(b.dataset.mode);
     b.classList.toggle('active', !!state.ch && (m === state.mode || (m === 2 && state.mode === 3)));
@@ -633,7 +647,9 @@ function onNotify(ev) {
   if (text.startsWith('mtu=')) {
     const mtu = parseInt(text.slice(4), 10);
     if (Number.isFinite(mtu) && mtu > 2) state.chunk = Math.max(18, Math.min(244, mtu - 2));
+    state.navFw = /\bnav=1\b/.test(text);
     log(`← ${text.trim()} → gói ảnh ${state.chunk} byte`, 'log-rx');
+    if (state.navFw) log('Firmware hỗ trợ lệnh chỉ đường trực tiếp (refresh nhanh).', 'log-rx');
     refreshInfo();
     return;
   }
@@ -715,7 +731,7 @@ async function connect() {
 
 function resetConn() {
   state.server = null; state.ch = null;
-  state.modelId = null; state.panel = null; state.fw = 0; state.chunk = 128; state.configHex = null;
+  state.modelId = null; state.panel = null; state.fw = 0; state.chunk = 128; state.configHex = null; state.navFw = false;
   state.waiters.forEach(w => { clearTimeout(w.timer); w.resolve(null); });
   state.waiters = [];
   setConn('Chưa kết nối');
@@ -1539,9 +1555,46 @@ function showInfo(info) {
   $('navEta').textContent = fmtClock(info.eta);
 }
 
+const NAV_ICON_IDS = {
+  straight: 0, left: 1, right: 2, 'slight-left': 3, 'slight-right': 4, 'sharp-left': 5, 'sharp-right': 6,
+  'keep-left': 7, 'keep-right': 8, 'uturn-left': 9, 'uturn-right': 10, roundabout: 11, merge: 12, arrive: 13,
+};
+/* Firmware with nav=1 renders the screen itself: 40 flags icon dist(u16) remain/10(u16) eta_h eta_m text */
+function navPacket(info) {
+  const dist = Math.min(65535, Math.round(info.dist || 0));
+  const remain = Math.min(65535, Math.round((info.remain || 0) / 10));
+  const bytes = new TextEncoder().encode((info.text || '').normalize('NFC'));
+  let n = Math.min(bytes.length, 160);
+  while (n > 0 && n < bytes.length && (bytes[n] & 0xc0) === 0x80) n--;
+  const pkt = new Uint8Array(9 + n);
+  pkt.set([0x40, info.arrived ? 0x02 : 0x00, NAV_ICON_IDS[info.code] ?? 0, dist & 0xff, dist >> 8,
+    remain & 0xff, remain >> 8, info.eta.getHours(), info.eta.getMinutes()]);
+  pkt.set(bytes.subarray(0, n), 9);
+  return pkt;
+}
+
 async function maybeSend(force) {
   const info = nav.info;
   if (!info || nav.sending || !$('navAutoSend').checked || !state.ch || state.busy) return;
+  if (state.navFw) {
+    const key = info.arrived ? 'arrived' : `${info.idx}|${Math.round(info.dist / 10)}`;
+    const stepChanged = !info.arrived && nav.lastKey && nav.lastKey.split('|')[0] !== String(info.idx);
+    if (!force && key === nav.lastKey) return;
+    if (!force && !stepChanged && Date.now() - nav.lastSentAt < 3000) return;
+    nav.sending = true;
+    try {
+      await send(navPacket(info), true);
+      nav.lastKey = key;
+      nav.lastSentAt = Date.now();
+      nav.sends++;
+      $('navSent').textContent = `${nav.sends} gói lệnh · gần nhất ${fmtClock(new Date())}`;
+    } catch (e) {
+      log('Gửi lệnh chỉ đường lỗi: ' + e.message, 'log-err');
+    } finally {
+      nav.sending = false;
+    }
+    return;
+  }
   const bucket = info.arrived ? -1 : BUCKETS.findIndex(t => info.dist > t);
   const key = info.arrived ? 'arrived' : `${info.idx}|${bucket}`;
   if (!force && key === nav.lastKey) return;
@@ -1676,6 +1729,7 @@ function stopNav(arrived) {
   $('btnNavReroute').disabled = true;
   setStatus('navStatus', arrived ? 'Đã đến nơi — kết thúc chỉ đường.' : 'Đã dừng chỉ đường.', arrived ? 'ok' : '');
   if (arrived) maybeSend(true);
+  else if (state.navFw && state.ch) send([0x41, 0x00]).catch(() => {});
 }
 
 function initNav() {
@@ -1802,6 +1856,13 @@ function init() {
     await send([CMD.ACTIVATE, (code >>> 8) & 0xff, code & 0xff]);
     if (!await r) setStatus('actStatus', 'Hết thời gian chờ phản hồi kích hoạt.', 'err');
   }, 'actStatus');
+
+  $('btnFwApply').onclick = () => guarded(async () => {
+    const n = Math.max(1, Math.min(100, Number($('fwFullEvery').value) || 20));
+    await send([0x41, 0x01, $('fwFast').checked ? 1 : 0]);
+    await send([0x41, 0x02, n]);
+    setStatus('fwStatus', 'Đã lưu cấu hình refresh vào nhãn.', 'ok');
+  }, 'fwStatus');
 
   $('btnRaw').onclick = () => guarded(async () => {
     const h = $('rawHex').value.replace(/[^0-9a-f]/gi, '');

@@ -120,34 +120,14 @@ typedef enum {
 
 // EPD driver IC types
 typedef enum {
-    DRV_IC_UC8159 = 0x10,
-    DRV_IC_UC8176 = 0x11,
-    DRV_IC_UC8179 = 0x12,
-    DRV_IC_SSD1619 = 0x20,
-    DRV_IC_SSD1677 = 0x21,
-    DRV_IC_JD79668 = 0x30,
-    DRV_IC_JD79665 = 0x31,
+    DRV_IC_SSD1680 = 0x22,
 } epd_drv_ic_t;
 
-// Do not change the existing IDs!
+// Model 2 matches the ID the stock AESL0213C firmware reports for its 2.13" panel,
+// so the stored config and the existing web tools keep working.
 typedef enum {
-    UC8176_420_BW = 0x01,
-    UC8176_420_BWR = 0x03,
-    SSD1619_420_BWR = 0x02,
-    SSD1619_420_BW = 0x04,
-    JD79668_420_BWRY = 0x05,
-    UC8179_750_BW = 0x06,
-    UC8179_750_BWR = 0x07,
-    UC8159_750_LOW_BW = 0x08,
-    UC8159_750_LOW_BWR = 0x09,
-    SSD1677_750_HD_BW = 0x0a,
-    SSD1677_750_HD_BWR = 0x0b,
-    JD79665_750_BWRY = 0x0c,
-    JD79665_583_BWRY = 0x0d,
-    UC8159_583_LOW_BWR = 0x0e,
-    UC8159_583_LOW_BW = 0x0f,
-    UC8179_583_BWR = 0x10,
-    UC8179_583_BW = 0x11,
+    SSD1680_213_BWR = 0x02,
+    SSD1680_213_BW = 0x20,
 } epd_model_id_t;
 
 struct epd_driver;
@@ -228,5 +208,10 @@ void EPD_LED_BLINK(void);
 uint16_t EPD_ReadVoltage(void);
 
 epd_model_t* epd_init(epd_model_id_t id);
+
+// SSD1680 helpers for the on-device screens
+void SSD1680_WritePlane(epd_model_t* epd, bool bw_ram, const uint8_t* data, uint16_t len);
+void SSD1680_FillPlane(epd_model_t* epd, bool bw_ram, uint8_t value);
+void SSD1680_RefreshPartial(epd_model_t* epd);
 
 #endif

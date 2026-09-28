@@ -1,7 +1,8 @@
 #ifndef __GUI_H
 #define __GUI_H
 
-#include "Adafruit_GFX.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef enum {
     MODE_PICTURE = 0,
@@ -9,18 +10,46 @@ typedef enum {
     MODE_CLOCK = 2,
 } display_mode_t;
 
-typedef struct {
-    display_mode_t mode;
-    uint16_t color;
-    uint16_t width;
-    uint16_t height;
-    uint32_t timestamp;
-    uint8_t week_start;  // 0: Sunday, 1: Monday
-    int8_t temperature;
-    uint16_t voltage;
-    char ssid[20];
-} gui_data_t;
+// Maneuver icons (NAV command, byte 2)
+typedef enum {
+    NAV_STRAIGHT = 0,
+    NAV_LEFT,
+    NAV_RIGHT,
+    NAV_SLIGHT_LEFT,
+    NAV_SLIGHT_RIGHT,
+    NAV_SHARP_LEFT,
+    NAV_SHARP_RIGHT,
+    NAV_KEEP_LEFT,
+    NAV_KEEP_RIGHT,
+    NAV_UTURN_LEFT,
+    NAV_UTURN_RIGHT,
+    NAV_ROUNDABOUT,
+    NAV_MERGE,
+    NAV_ARRIVE,
+} nav_icon_t;
 
-void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data);
+#define NAV_FLAG_ARRIVED 0x02
+#define NAV_TEXT_MAX 160
+
+typedef struct {
+    uint8_t flags;
+    uint8_t icon;
+    uint16_t dist_m;     // distance to the maneuver
+    uint16_t remain_10m; // remaining route distance, 10 m units
+    uint8_t eta_h, eta_m;
+    uint8_t text_len;
+    char text[NAV_TEXT_MAX];  // UTF-8 instruction
+} nav_data_t;
+
+#define GUI_W 250
+#define GUI_H 128
+#define GUI_BUF_SIZE (GUI_W * GUI_H / 8)
+
+// Frame buffer in panel RAM order (column-first from the right edge), 1 = white.
+uint8_t* gui_buffer(void);
+
+void gui_draw_nav(const nav_data_t* nav);
+void gui_draw_clock(uint32_t local_ts, uint16_t mv, int8_t temp);
+void gui_draw_date(uint32_t local_ts, uint16_t mv, int8_t temp);
 
 #endif

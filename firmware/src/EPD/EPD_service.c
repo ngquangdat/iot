@@ -22,6 +22,7 @@
 #include "nrf_log.h"
 #include "nrf_pwr_mgmt.h"
 #include "sdk_macros.h"
+#include "app_util_platform.h"
 
 #if defined(S112)
 #define EPD_CFG_52811 {0x14, 0x13, 0x06, 0x05, 0x04, 0x03, 0x02, 0x02, 0xFF, 0x12, 0x07}
@@ -31,58 +32,127 @@
 // #define EPD_CFG_DEFAULT {0x05, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x01, 0x07}
 #endif
 
-static uint32_t rle_decompress_from(const uint8_t* src, uint32_t src_len, uint32_t* src_pos, uint8_t* dst,
-                                    uint32_t dst_len) {
-    uint32_t dst_pos = 0;
-    while (*src_pos < src_len && dst_pos < dst_len) {
-        uint8_t control = src[*src_pos];  // peek, don't consume yet
-        if (control & 0x80) {             // repeat run
-            uint32_t count = (control & 0x7F) + 3;
-            if (*src_pos + 1 >= src_len) break;    // need value byte
-            if (dst_pos + count > dst_len) break;  // won't fit — retry later
-            (*src_pos)++;                          // consume control
-            (*src_pos)++;                          // consume value
-            uint8_t value = src[*src_pos - 1];
-            for (uint32_t j = 0; j < count; j++) dst[dst_pos++] = value;
-        } else {  // literal run
-            uint32_t count = control + 1;
-            if (*src_pos + 1 + count > src_len) break;  // need all literal bytes
-            if (dst_pos + count > dst_len) break;       // won't fit — retry later
-            (*src_pos)++;                               // consume control
-            for (uint32_t j = 0; j < count; j++) dst[dst_pos++] = src[(*src_pos)++];
-        }
+typedef enum { SCR_NONE = 0, SCR_NAV, SCR_CLOCK, SCR_DATE } screen_t;
+
+// What our last render left on the panel; partial refreshes re-render it as the "old" frame.
+static struct {
+    screen_t screen;
+    nav_data_t nav;
+    uint32_t ts;
+    uint16_t mv;
+    int8_t temp;
+    uint8_t partials;
+} m_shown;
+
+static nav_data_t m_nav_pending;
+static volatile bool m_nav_active, m_nav_force, m_nav_sched;
+
+static void render(screen_t scr, const nav_data_t* nav, uint32_t ts, uint16_t mv, int8_t temp) {
+    if (scr == SCR_NAV)
+        gui_draw_nav(nav);
+    else if (scr == SCR_DATE)
+        gui_draw_date(ts, mv, temp);
+    else
+        gui_draw_clock(ts, mv, temp);
+}
+
+static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav, uint32_t ts, bool force_full) {
+    EPD_GPIO_Init();
+    epd_model_t* epd = epd_init((epd_model_id_t)p_epd->config.model_id);
+    uint16_t mv = m_shown.mv;
+    int8_t temp = m_shown.temp;
+    if (scr != SCR_NAV) {
+        temp = epd->drv->read_temp(epd);
+        mv = EPD_ReadVoltage();
     }
-    return dst_pos;
+
+    uint8_t full_every = p_epd->config.full_every == 0xFF ? 20 : p_epd->config.full_every;
+    bool full = force_full || p_epd->config.fast_refresh == 0 || m_shown.screen != scr ||
+                m_shown.partials >= full_every;
+    if (full) {
+        render(scr, nav, ts, mv, temp);
+        SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
+        SSD1680_FillPlane(epd, false, 0xFF);  // no red
+        epd->drv->refresh(epd);
+        m_shown.partials = 0;
+    } else {
+        render(m_shown.screen, &m_shown.nav, m_shown.ts, m_shown.mv, m_shown.temp);
+        SSD1680_WritePlane(epd, false, gui_buffer(), GUI_BUF_SIZE);
+        render(scr, nav, ts, mv, temp);
+        SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
+        SSD1680_RefreshPartial(epd);
+        m_shown.partials++;
+    }
+    m_shown.screen = scr;
+    if (nav) m_shown.nav = *nav;
+    m_shown.ts = ts;
+    m_shown.mv = mv;
+    m_shown.temp = temp;
+
+    epd->drv->sleep(epd);
+    nrf_delay_ms(200);  // for sleep
+    EPD_GPIO_Uninit();
+    app_feed_wdt();
 }
 
 static void epd_gui_update(void* p_event_data, uint16_t event_size) {
     epd_gui_update_event_t* event = (epd_gui_update_event_t*)p_event_data;
     ble_epd_t* p_epd = event->p_epd;
 
-    EPD_GPIO_Init();
-    epd_model_t* epd = epd_init((epd_model_id_t)p_epd->config.model_id);
-    gui_data_t data = {
-        .mode = (display_mode_t)p_epd->config.display_mode,
-        .color = epd->color,
-        .width = epd->width,
-        .height = epd->height,
-        .timestamp = event->timestamp,
-        .week_start = p_epd->config.week_start,
-        .temperature = epd->drv->read_temp(epd),
-        .voltage = EPD_ReadVoltage(),
-    };
+    if (m_nav_active) return;  // navigation owns the screen
+    if (p_epd->config.display_mode == MODE_PICTURE) return;
+    screen_update(p_epd, p_epd->config.display_mode == MODE_CLOCK ? SCR_CLOCK : SCR_DATE, NULL, event->timestamp,
+                  event->force);
+}
 
-    uint16_t dev_name_len = sizeof(data.ssid);
-    uint32_t err_code = sd_ble_gap_device_name_get((uint8_t*)data.ssid, &dev_name_len);
-    if (err_code == NRF_SUCCESS && dev_name_len > 0) data.ssid[dev_name_len] = '\0';
+static void epd_nav_update(void* p_event_data, uint16_t event_size) {
+    epd_gui_update_event_t* event = (epd_gui_update_event_t*)p_event_data;
+    static nav_data_t nav;
+    bool force;
 
-    DrawGUI(&data, (buffer_callback)epd->drv->write_image, epd);
-    epd->drv->refresh(epd);
-    epd->drv->sleep(epd);
-    nrf_delay_ms(200);  // for sleep
-    EPD_GPIO_Uninit();
+    CRITICAL_REGION_ENTER();
+    m_nav_sched = false;  // later writes schedule a fresh render with the newest data
+    nav = m_nav_pending;
+    force = m_nav_force;
+    m_nav_force = false;
+    CRITICAL_REGION_EXIT();
 
-    app_feed_wdt();
+    if (!m_nav_active) return;
+    if (!force && m_shown.screen == SCR_NAV && memcmp(&nav, &m_shown.nav, sizeof(nav)) == 0) return;
+    screen_update(event->p_epd, SCR_NAV, &nav, 0, force);
+}
+
+// NAV packet: 40 flags icon dist_lo dist_hi remain_lo remain_hi eta_h eta_m text...
+static void epd_nav_receive(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length) {
+    if (length < 9) return;
+    bool schedule;
+    CRITICAL_REGION_ENTER();
+    memset(&m_nav_pending, 0, sizeof(m_nav_pending));
+    m_nav_pending.flags = p_data[1];
+    m_nav_pending.icon = p_data[2];
+    m_nav_pending.dist_m = p_data[3] | (p_data[4] << 8);
+    m_nav_pending.remain_10m = p_data[5] | (p_data[6] << 8);
+    m_nav_pending.eta_h = p_data[7];
+    m_nav_pending.eta_m = p_data[8];
+    m_nav_pending.text_len = MIN(length - 9, NAV_TEXT_MAX);
+    memcpy(m_nav_pending.text, &p_data[9], m_nav_pending.text_len);
+    if (p_data[1] & 0x01) m_nav_force = true;
+    m_nav_active = true;
+    schedule = !m_nav_sched;
+    m_nav_sched = true;
+    CRITICAL_REGION_EXIT();
+
+    if (schedule) {
+        epd_gui_update_event_t event = {p_epd, 0, false};
+        app_sched_event_put(&event, sizeof(event), epd_nav_update);
+    }
+}
+
+static void epd_nav_stop(ble_epd_t* p_epd) {
+    if (!m_nav_active) return;
+    m_nav_active = false;
+    epd_gui_update_event_t event = {p_epd, timestamp(), true};
+    app_sched_event_put(&event, sizeof(event), epd_gui_update);
 }
 
 /**@brief Function for handling the @ref BLE_GAP_EVT_CONNECTED event from the S110 SoftDevice.
@@ -103,6 +173,7 @@ static void on_connect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
 static void on_disconnect(ble_epd_t* p_epd, ble_evt_t* p_ble_evt) {
     UNUSED_PARAMETER(p_ble_evt);
     p_epd->conn_handle = BLE_CONN_HANDLE_INVALID;
+    epd_nav_stop(p_epd);
     if (p_epd->epd) {
         p_epd->epd->drv->sleep(p_epd->epd);
         nrf_delay_ms(200);  // for sleep
@@ -125,7 +196,7 @@ static void epd_send_time(ble_epd_t* p_epd) {
 
 static void epd_send_mtu(ble_epd_t* p_epd) {
     char buf[20] = {0};
-    snprintf(buf, sizeof(buf), "mtu=%d rle=1", p_epd->max_data_len);
+    snprintf(buf, sizeof(buf), "mtu=%d nav=1", p_epd->max_data_len);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
 }
 
@@ -165,6 +236,7 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
 
         case EPD_CMD_CLEAR:
             epd_update_display_mode(p_epd, MODE_PICTURE);
+            m_shown.screen = SCR_NONE;
             if (p_epd->epd) {
                 p_epd->epd->drv->init(p_epd->epd);
                 p_epd->epd->drv->clear(p_epd->epd, length > 1 ? p_data[1] : true);
@@ -182,6 +254,8 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
 
         case EPD_CMD_REFRESH:
             epd_update_display_mode(p_epd, MODE_PICTURE);
+            m_nav_active = false;
+            m_shown.screen = SCR_NONE;
             if (p_epd->epd) p_epd->epd->drv->refresh(p_epd->epd);
             break;
 
@@ -198,7 +272,8 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
             uint32_t timestamp = (p_data[1] << 24) | (p_data[2] << 16) | (p_data[3] << 8) | p_data[4];
             timestamp += (length > 5 ? (int8_t)p_data[5] : 8) * 60 * 60;  // timezone
             set_timestamp(timestamp);
-            epd_update_display_mode(p_epd, length > 6 ? (display_mode_t)p_data[6] : MODE_CALENDAR);
+            m_nav_active = false;
+            epd_update_display_mode(p_epd, length > 6 ? (display_mode_t)(p_data[6] & 0x7F) : MODE_CALENDAR);
             ble_epd_on_timer(p_epd, timestamp, true);
         } break;
 
@@ -213,27 +288,28 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
         case EPD_CMD_WRITE_IMAGE: {
             if (length < 3) return;
 
-            // BIT 0: black/red, BIT 1: begin, BIT 2: rle
-            bool black = (p_data[1] & 0x01) == 0;
-            bool begin = (p_data[1] & 0x02) != 0;
-            bool rle = (p_data[1] & 0x04) != 0;
-
-            uint16_t data_len = length - 2;
-            uint8_t rle_out[UINT8_MAX];
-            uint32_t src_pos = 0;
-
-            if (rle) {
-                while (src_pos < data_len) {
-                    app_feed_wdt();
-                    uint32_t out_len = rle_decompress_from(&p_data[2], data_len, &src_pos, rle_out, sizeof(rle_out));
-                    if (out_len == 0) break;
-                    if (p_epd->epd) p_epd->epd->drv->write_ram(p_epd->epd, begin, black, rle_out, (uint16_t)out_len);
-                    begin = false;
-                }
-            } else {
-                if (p_epd->epd) p_epd->epd->drv->write_ram(p_epd->epd, begin, black, &p_data[2], data_len);
-            }
+            // low nibble 0x0F: black plane (else red), high nibble 0xF0: continuation (else begin)
+            bool black = (p_data[1] & 0x0F) == 0x0F;
+            bool begin = (p_data[1] & 0xF0) == 0x00;
+            if (p_epd->epd) p_epd->epd->drv->write_ram(p_epd->epd, begin, black, &p_data[2], length - 2);
         } break;
+
+        case EPD_CMD_NAV:
+            epd_nav_receive(p_epd, p_data, length);
+            break;
+
+        case EPD_CMD_NAV_CTRL:
+            if (length < 2) return;
+            if (p_data[1] == 0x00) {
+                epd_nav_stop(p_epd);
+            } else if (length > 2 && (p_data[1] == 0x01 || p_data[1] == 0x02)) {
+                if (p_data[1] == 0x01)
+                    p_epd->config.fast_refresh = p_data[2];
+                else
+                    p_epd->config.full_every = p_data[2] ? p_data[2] : 1;
+                epd_config_write(&p_epd->config);
+            }
+            break;
 
         case EPD_CMD_SET_CONFIG:
             if (length < 2) return;
@@ -401,6 +477,10 @@ uint32_t ble_epd_init(ble_epd_t* p_epd) {
         epd_config_write(&p_epd->config);
     }
 
+    p_epd->config.panel = 0x21;
+    if (p_epd->config.model_id != SSD1680_213_BWR && p_epd->config.model_id != SSD1680_213_BW)
+        p_epd->config.model_id = SSD1680_213_BWR;
+
     // load config
     EPD_GPIO_Load(&p_epd->config);
 
@@ -432,7 +512,7 @@ void ble_epd_on_timer(ble_epd_t* p_epd, uint32_t timestamp, bool force_update) {
     // Update calendar on 00:00:00, clock on every minute
     if (force_update || (p_epd->config.display_mode == MODE_CALENDAR && timestamp % 86400 == 0) ||
         (p_epd->config.display_mode == MODE_CLOCK && timestamp % 60 == 0)) {
-        epd_gui_update_event_t event = {p_epd, timestamp};
+        epd_gui_update_event_t event = {p_epd, timestamp, force_update};
         app_sched_event_put(&event, sizeof(epd_gui_update_event_t), epd_gui_update);
     }
 }

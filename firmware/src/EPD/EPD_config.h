@@ -17,6 +17,9 @@ typedef struct {
     uint8_t en_pin;
     uint8_t display_mode;
     uint8_t week_start;
+    uint8_t panel;         // 0x21 = 2.13" (reported to the web tools like the stock firmware)
+    uint8_t fast_refresh;  // 0: always full refresh, otherwise partial updates for clock/nav (0xFF = on)
+    uint8_t full_every;    // full refresh after this many partial updates (0xFF = 20)
 } epd_config_t;
 
 #define EPD_CONFIG_SIZE (sizeof(epd_config_t) / sizeof(uint8_t))

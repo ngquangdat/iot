@@ -14,6 +14,10 @@ Web điều khiển nhãn điện tử **AESL0213C** (Nordic nRF52811, e-paper 2
   hoặc OpenStreetMap (miễn phí), bám GPS, tự tính lại tuyến khi đi lệch, hiển thị mũi tên + khoảng cách +
   tên đường lên nhãn. Có chế độ mô phỏng để thử tại chỗ.
 
+## Firmware chỉ đường
+Thư mục [`firmware/`](firmware/README.md) chứa firmware mới cho nhãn (nạp OTA qua Bluetooth bằng nRF Connect),
+cho phép nhãn tự vẽ màn chỉ đường với refresh nhanh. Web tự nhận ra firmware này (`nav=1`).
+
 ## Chỉ đường trên iPhone
 Safari không hỗ trợ Web Bluetooth, hãy mở trang bằng ứng dụng **Bluefy** và cho phép quyền vị trí. Trang phải
 luôn mở ở màn hình chính (iOS tạm dừng web khi chạy nền). Với firmware hiện tại mỗi lần cập nhật nhãn là một lần

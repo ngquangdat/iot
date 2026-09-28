@@ -1,459 +1,465 @@
 #include "GUI.h"
 
-#include <stdio.h>
-#include <time.h>
+#include <string.h>
 
-#include "Lunar.h"
-#include "fonts.h"
+#include "font.h"
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#define GFX_printf_styled(gfx, fg, bg, font, ...) \
-    GFX_setTextColor(gfx, fg, bg);                \
-    GFX_setFont(gfx, font);                       \
-    GFX_printf(gfx, __VA_ARGS__);
+// Landscape 250x128 canvas over the panel's native 128x250 RAM layout.
+// Content stays inside rows 2..121: the glass only shows 122 of the 128 sources.
 
-// height to use larger layout
-#define large_layout(data) ((data)->height >= 400)
+static uint8_t fb[GUI_BUF_SIZE];
+
+uint8_t* gui_buffer(void) { return fb; }
 
 typedef struct {
-    uint8_t month;
-    uint8_t day;
-    char name[10];  // 3x3+1
-} Festival;
+    int16_t x, y;
+} pt_t;
 
-static const Festival festivals[] = {
-    {1, 1, "元旦节"},  {2, 14, "情人节"}, {3, 8, "妇女节"},  {3, 12, "植树节"},  {4, 1, "愚人节"},
-    {5, 1, "劳动节"},  {5, 4, "青年节"},  {6, 1, "儿童节"},  {7, 1, "建党节"},   {8, 1, "建军节"},
-    {9, 10, "教师节"}, {10, 1, "国庆节"}, {11, 1, "万圣节"}, {12, 24, "平安夜"}, {12, 25, "圣诞节"},
-};
+/* ---------- raster primitives (black on white) ---------- */
 
-static const Festival festivals_lunar[] = {
-    {1, 1, "春节"},    {1, 15, "元宵节"}, {2, 2, "龙抬头"},  {5, 5, "端午节"},  {7, 7, "七夕节"}, {7, 15, "中元节"},
-    {8, 15, "中秋节"}, {9, 9, "重阳节"},  {10, 1, "寒衣节"}, {12, 8, "腊八节"}, {12, 30, "除夕"},
-};
-
-// 放假和调休数据，每年更新
-#define HOLIDAY_YEAR 2026
-static const uint16_t holidays[] = {
-    0x0101, 0x0102, 0x0103, 0x1104, 0x120E, 0x020F, 0x0210, 0x0211, 0x0212, 0x0213, 0x0214, 0x0215, 0x0216,
-    0x0217, 0x121C, 0x0404, 0x0405, 0x0406, 0x0501, 0x0502, 0x0503, 0x0504, 0x0505, 0x1509, 0x0613, 0x0614,
-    0x0615, 0x0919, 0x091A, 0x091B, 0x1914, 0x0A01, 0x0A02, 0x0A03, 0x0A04, 0x0A05, 0x0A06, 0x0A07, 0x1A0A,
-};
-
-static bool GetHoliday(uint8_t mon, uint8_t day, bool* work) {
-    for (uint8_t i = 0; i < ARRAY_SIZE(holidays); i++) {
-        if (((holidays[i] >> 8) & 0xF) == mon && (holidays[i] & 0xFF) == day) {
-            *work = ((holidays[i] >> 12) & 0xF) > 0;
-            return true;
-        }
-    }
-    return false;
+static void px(int x, int y) {
+    if ((unsigned)x >= GUI_W || (unsigned)y >= GUI_H) return;
+    fb[(GUI_W - 1 - x) * (GUI_H / 8) + (y >> 3)] &= ~(0x80 >> (y & 7));
 }
 
-static bool GetFestival(uint16_t year, uint8_t mon, uint8_t day, uint8_t week, struct Lunar_Date* Lunar,
-                        char* festival) {
-    // 农历节日
-    for (uint8_t i = 0; i < ARRAY_SIZE(festivals_lunar); i++) {
-        if (Lunar->Month == festivals_lunar[i].month && Lunar->Date == festivals_lunar[i].day) {
-            strcpy(festival, festivals_lunar[i].name);
-            return true;
-        }
+static void hline(int x0, int x1, int y) {
+    if (x0 > x1) {
+        int t = x0;
+        x0 = x1;
+        x1 = t;
     }
-
-    // 除夕：春节前一天（12/29 或 12/30），12/30 已在上面判断
-    if (Lunar->Month == 12 && Lunar->Date == 29) {
-        struct Lunar_Date nextLunar;
-        struct devtm tm = {year, mon, day, 0, 0, 0, week};
-        transformTime(transformTimeStruct(&tm) + 86400, &tm);
-        LUNAR_SolarToLunar(&nextLunar, tm.tm_year + YEAR0, tm.tm_mon + 1, tm.tm_mday);
-        if (nextLunar.Month == 1 && nextLunar.Date == 1) {
-            strcpy(festival, "除夕");
-            return true;
-        }
-    }
-    // 母亲节: 五月第二个星期日
-    if (mon == 5 && week == 0 && day >= 8 && day <= 14) {
-        strcpy(festival, "母亲节");
-        return true;
-    }
-    // 父亲节: 六月第三个星期日
-    if (mon == 6 && week == 0 && day >= 15 && day <= 21) {
-        strcpy(festival, "父亲节");
-        return true;
-    }
-    // 感恩节：十一月第四个星期四
-    if (mon == 11 && week == 4 && day >= 22 && day <= 28) {
-        strcpy(festival, "感恩节");
-        return true;
-    }
-
-    // 公历节日
-    for (uint8_t i = 0; i < ARRAY_SIZE(festivals); i++) {
-        if (mon == festivals[i].month && day == festivals[i].day) {
-            strcpy(festival, festivals[i].name);
-            return true;
-        }
-    }
-
-    // 二十四节气
-    uint8_t JQdate;
-    if (GetJieQi(year, mon, day, &JQdate) && JQdate == day) {
-        uint8_t JQ = (mon - 1) * 2;
-        if (day >= 15) JQ++;
-        strcpy(festival, JieQiStr[JQ]);
-        if (JQ == 6)  // 清明
-            strcat(festival, "节");
-
-        return true;
-    }
-
-    return false;
+    for (int x = x0; x <= x1; x++) px(x, y);
 }
 
-static void DrawTimeSyncTip(Adafruit_GFX* gfx, gui_data_t* data) {
-    const char* title = "SYNC TIME!";
-    const char* url = "https://tsl0922.github.io/EPD-nRF5";
-
-    GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
-
-    int16_t fh = GFX_getFontHeight(gfx);
-    int16_t box_w = GFX_getUTF8Width(gfx, url) + 20;
-    int16_t box_h = fh * 2 + 20;
-    int16_t box_x = (data->width - box_w) / 2;
-    int16_t box_y = data->height / 2 - box_h / 2;
-
-    GFX_fillRect(gfx, box_x, box_y, box_w, box_h, GFX_WHITE);
-    GFX_drawRoundRect(gfx, box_x, box_y, box_w, box_h, 5, GFX_BLACK);
-    GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
-    GFX_setCursor(gfx, box_x + (box_w - GFX_getUTF8Width(gfx, title)) / 2, box_y + 5 + fh);
-    GFX_printf(gfx, title);
-    GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
-    GFX_setCursor(gfx, box_x + 10, box_y + box_h - GFX_getFontAscent(gfx));
-    GFX_printf(gfx, url);
+static void fill_rect(int x, int y, int w, int h) {
+    for (int j = y; j < y + h; j++) hline(x, x + w - 1, j);
 }
 
-static uint8_t batt_cal(uint16_t voltage) {
-    uint16_t adc_sample = (voltage * 2047) / 3600;
-    if (adc_sample > 1705)
-        return 100;
-    else if (adc_sample <= 1705 && adc_sample > 1584)
-        return 28 + (uint8_t)(((((adc_sample - 1584) << 16) / (1705 - 1584)) * 72) >> 16);
-    else if (adc_sample <= 1584 && adc_sample > 1360)
-        return 4 + (uint8_t)(((((adc_sample - 1360) << 16) / (1584 - 1360)) * 24) >> 16);
-    else if (adc_sample <= 1360 && adc_sample > 1136)
-        return (uint8_t)(((((adc_sample - 1136) << 16) / (1360 - 1136)) * 4) >> 16);
-    else
-        return 0;
-}
-
-static void DrawBattery(Adafruit_GFX* gfx, int16_t x, int16_t y, uint8_t iw, uint16_t voltage) {
-    x -= iw;
-    uint8_t level = batt_cal(voltage);
-    GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
-    GFX_setCursor(gfx, x - GFX_getUTF8Width(gfx, "3.2V") - 2, y + 9);
-    GFX_printf(gfx, "%d.%dV", voltage / 1000, (voltage % 1000) / 100);
-    GFX_fillRect(gfx, x, y, iw, 10, GFX_WHITE);
-    GFX_drawRect(gfx, x, y, iw, 10, GFX_BLACK);
-    GFX_fillRect(gfx, x + iw, y + 4, 2, 2, GFX_BLACK);
-    GFX_fillRect(gfx, x + 2, y + 2, 16 * level / 100, 6, GFX_BLACK);
-}
-
-static uint8_t GetWeekOfYear(uint8_t year, uint8_t mon, uint8_t mday, uint8_t wday) {
-    struct tm tm = {0};
-    tm.tm_year = year;
-    tm.tm_mon = mon;
-    tm.tm_mday = mday;
-    tm.tm_wday = wday;
-    tm.tm_isdst = -1;
-    mktime(&tm);
-    char buffer[3] = {0};
-    strftime(buffer, 3, "%V", &tm);
-    return atoi(buffer);
-}
-
-static void DrawDateHeader(Adafruit_GFX* gfx, int16_t x, int16_t y, tm_t* tm, struct Lunar_Date* Lunar,
-                           gui_data_t* data) {
-    GFX_setCursor(gfx, x, y - 2);
-    GFX_printf_styled(gfx, GFX_RED, GFX_WHITE, u8g2_font_helvB18_tn, "%d", tm->tm_year + YEAR0);
-    GFX_printf_styled(gfx, GFX_BLACK, GFX_WHITE, u8g2_font_wqy12_t_lunar, "年");
-    GFX_printf_styled(gfx, GFX_RED, GFX_WHITE, u8g2_font_helvB18_tn, "%d", tm->tm_mon + 1);
-    GFX_printf_styled(gfx, GFX_BLACK, GFX_WHITE, u8g2_font_wqy12_t_lunar, "月");
-
-    int16_t tx = gfx->tx;
-    int16_t ty = y;
-
-    GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
-    GFX_setCursor(gfx, tx, ty);
-    if (Lunar->IsLeap) GFX_printf(gfx, " ");
-    GFX_printf(gfx, "%s%s%s", Lunar_MonthLeapString[Lunar->IsLeap], Lunar_MonthString[Lunar->Month],
-               Lunar_DateString[Lunar->Date]);
-    GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
-    GFX_printf(gfx, " [%d周]", GetWeekOfYear(tm->tm_year, tm->tm_mon, tm->tm_mday, tm->tm_wday));
-
-    GFX_setCursor(gfx, tx, ty - 14);
-    GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
-    GFX_printf(gfx, " %s%s年", Lunar_StemStrig[LUNAR_GetStem(Lunar)], Lunar_BranchStrig[LUNAR_GetBranch(Lunar)]);
-    GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
-    GFX_printf(gfx, " [%s]", Lunar_ZodiacString[LUNAR_GetZodiac(Lunar)]);
-
-    GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
-    DrawBattery(gfx, data->width - 10 - 2, large_layout(data) ? 16 : 6, 20, data->voltage);
-    GFX_setCursor(gfx, data->width - GFX_getUTF8Width(gfx, data->ssid) - 10, y);
-    GFX_printf(gfx, "%s", data->ssid);
-}
-
-static void DrawWeekHeader(Adafruit_GFX* gfx, int16_t x, int16_t y, gui_data_t* data) {
-    GFX_setFont(gfx, large_layout(data) ? u8g2_font_wqy12_t_lunar : u8g2_font_wqy9_t_lunar);
-    uint8_t w = (data->width - 2 * x) / 7;
-    uint8_t h = large_layout(data) ? 32 : 24;
-    uint8_t r = (data->width - 2 * x) % 7;
-    uint8_t fh = (h - GFX_getFontHeight(gfx)) / 2 + GFX_getFontAscent(gfx) + 1;
-    int16_t cw = GFX_getUTF8Width(gfx, Lunar_DayString[0]);
-    for (int i = 0; i < 7; i++) {
-        uint8_t day = (data->week_start + i) % 7;
-        uint16_t bg = (day == 0 || day == 6) ? GFX_RED : GFX_BLACK;
-        GFX_fillRect(gfx, x + i * w, y, i == 6 ? (w + r) : w, h, bg);
-        GFX_setTextColor(gfx, GFX_WHITE, bg);
-        GFX_setCursor(gfx, x + (w - cw) / 2 + i * w, y + fh);
-        GFX_printf(gfx, "%s", Lunar_DayString[day]);
-    }
-}
-
-static void DrawMonthDays(Adafruit_GFX* gfx, int16_t x, int16_t y, tm_t* tm, struct Lunar_Date* Lunar,
-                          gui_data_t* data) {
-    uint8_t firstDayWeek = get_first_day_week(tm->tm_year + YEAR0, tm->tm_mon + 1);
-    int8_t adjustedFirstDay = (firstDayWeek - data->week_start + 7) % 7;
-    uint8_t monthMaxDays = thisMonthMaxDays(tm->tm_year + YEAR0, tm->tm_mon + 1);
-    uint8_t monthDayRows = 1 + (monthMaxDays - (7 - adjustedFirstDay) + 6) / 7;
-
-    int16_t bw = (data->width - x - 10) / 7;
-    int16_t bh = (data->height - y - 10) / monthDayRows;
-    bool large = large_layout(data);
-
-    if (large) {
-        for (uint8_t i = 1; i < monthDayRows; i++)
-            GFX_drawDottedLine(gfx, x, y + i * bh, x + 7 * bw - 1, y + i * bh, GFX_BLACK, 1, 5);
-        for (uint8_t i = 1; i < 7; i++)
-            GFX_drawDottedLine(gfx, x + i * bw, y, x + i * bw, y + monthDayRows * bh - 1, GFX_BLACK, 1, 5);
-    }
-
-    for (uint8_t i = 0; i < monthMaxDays; i++) {
-        uint16_t year = tm->tm_year + YEAR0;
-        uint8_t month = tm->tm_mon + 1;
-        uint8_t day = i + 1;
-
-        int16_t actualWeek = (firstDayWeek + i) % 7;
-        int16_t displayWeek = (adjustedFirstDay + i) % 7;
-        bool weekend = (actualWeek == 0) || (actualWeek == 6);
-
-        LUNAR_SolarToLunar(Lunar, year, month, day);
-
-        int16_t cr = large ? 15 : 11;
-        if (monthDayRows > 5) cr -= 1;  // reduce circle height for 6 week rows
-        int16_t bx = x + (bw - 2 * cr) / 2 + displayWeek * bw;
-        int16_t by = y + (bh - 2 * cr) / 2 + (i + adjustedFirstDay) / 7 * bh + 3;
-
-        if (day == tm->tm_mday) {
-            GFX_fillCircle(gfx, bx + cr, by + cr - 3, 2 * cr, GFX_RED);
-            GFX_setTextColor(gfx, GFX_WHITE, GFX_RED);
+static uint32_t isqrt(uint32_t n) {
+    uint32_t r = 0, bit = 1UL << 30;
+    while (bit > n) bit >>= 2;
+    while (bit) {
+        if (n >= r + bit) {
+            n -= r + bit;
+            r = (r >> 1) + bit;
         } else {
-            GFX_setTextColor(gfx, weekend ? GFX_RED : GFX_BLACK, GFX_WHITE);
+            r >>= 1;
         }
+        bit >>= 2;
+    }
+    return r;
+}
 
-        char buf[10] = {0};
-        snprintf(buf, sizeof(buf), "%d", day);
-        GFX_setFont(gfx, large ? u8g2_font_helvB18_tn : u8g2_font_helvB14_tn);
-        GFX_setCursor(gfx, bx + (2 * cr - GFX_getUTF8Width(gfx, buf)) / 2, by - (cr - GFX_getFontHeight(gfx)) - 1);
-        GFX_printf(gfx, "%s", buf);
+static void fill_tri(pt_t a, pt_t b, pt_t c) {
+    pt_t t;
+    if (a.y > b.y) t = a, a = b, b = t;
+    if (b.y > c.y) t = b, b = c, c = t;
+    if (a.y > b.y) t = a, a = b, b = t;
+    if (a.y == c.y) {
+        int lo = a.x, hi = a.x;
+        if (b.x < lo) lo = b.x;
+        if (b.x > hi) hi = b.x;
+        if (c.x < lo) lo = c.x;
+        if (c.x > hi) hi = c.x;
+        hline(lo, hi, a.y);
+        return;
+    }
+    for (int y = a.y; y <= c.y; y++) {
+        int xa = a.x + (int32_t)(c.x - a.x) * (y - a.y) / (c.y - a.y);
+        int xb;
+        if (y < b.y)
+            xb = a.x + (int32_t)(b.x - a.x) * (y - a.y) / (b.y - a.y);
+        else if (c.y != b.y)
+            xb = b.x + (int32_t)(c.x - b.x) * (y - b.y) / (c.y - b.y);
+        else
+            xb = b.x;
+        hline(xa, xb, y);
+    }
+}
 
-        GFX_setFont(gfx, large ? u8g2_font_wqy12_t_lunar : u8g2_font_wqy9_t_lunar);
-        GFX_setFontMode(gfx, 1);  // transparent
-        if (GetFestival(year, month, day, actualWeek, Lunar, buf)) {
-            if (day != tm->tm_mday) GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
+static void fill_circle(int cx, int cy, int r) {
+    for (int dy = -r; dy <= r; dy++) {
+        int dx = isqrt(r * r - dy * dy);
+        hline(cx - dx, cx + dx, cy + dy);
+    }
+}
+
+// Ring with outer radius r and thickness t.
+static void ring(int cx, int cy, int r, int t) {
+    int ri = r - t;
+    for (int dy = -r; dy <= r; dy++) {
+        int dxo = isqrt(r * r - dy * dy);
+        if (dy > -ri && dy < ri) {
+            int dxi = isqrt(ri * ri - dy * dy);
+            hline(cx - dxo, cx - dxi - 1, cy + dy);
+            hline(cx + dxi + 1, cx + dxo, cy + dy);
         } else {
-            if (Lunar->Date == 1)
-                snprintf(buf, sizeof(buf), "%s%s", Lunar_MonthLeapString[Lunar->IsLeap],
-                         Lunar_MonthString[Lunar->Month]);
-            else
-                snprintf(buf, sizeof(buf), "%s", Lunar_DateString[Lunar->Date]);
+            hline(cx - dxo, cx + dxo, cy + dy);
         }
-        GFX_setCursor(gfx, bx + (2 * cr - GFX_getUTF8Width(gfx, buf)) / 2 + 1,
-                      gfx->ty + GFX_getFontHeight(gfx) + (large ? 5 : 3));
-        GFX_printf(gfx, "%s", buf);
+    }
+}
 
-        bool work = false;
-        if (year == HOLIDAY_YEAR && GetHoliday(month, day, &work)) {
-            if (day == tm->tm_mday) {
-                uint16_t rx = bx + (large ? 36 : 27);
-                uint16_t ry = by - 2;
-                uint8_t cr = large ? 10 : 8;
-                GFX_fillCircle(gfx, rx, ry, cr, GFX_WHITE);
-                GFX_drawCircle(gfx, rx, ry, cr, GFX_RED);
+static void thick_line(pt_t p0, pt_t p1, int w) {
+    int dx = p1.x - p0.x, dy = p1.y - p0.y;
+    int len = isqrt(dx * dx + dy * dy);
+    if (len == 0) {
+        fill_circle(p0.x, p0.y, w / 2);
+        return;
+    }
+    int ox = -dy * w / (2 * len), oy = dx * w / (2 * len);
+    pt_t a = {p0.x + ox, p0.y + oy}, b = {p1.x + ox, p1.y + oy};
+    pt_t c = {p1.x - ox, p1.y - oy}, d = {p0.x - ox, p0.y - oy};
+    fill_tri(a, b, c);
+    fill_tri(a, c, d);
+}
+
+/* ---------- maneuver icons (ported from the web preview) ---------- */
+
+// Stroke a polyline with round joins and finish it with an arrow head.
+static void arrow(const pt_t* pts, int n, int w, int s) {
+    int head = s * 3 / 10, half = s / 5;
+    pt_t tip = pts[n - 1], prev = pts[n - 2];
+    int dx = tip.x - prev.x, dy = tip.y - prev.y;
+    int len = isqrt(dx * dx + dy * dy);
+    if (len == 0) len = 1;
+    pt_t base = {tip.x - dx * head * 9 / (10 * len), tip.y - dy * head * 9 / (10 * len)};
+    for (int i = 0; i + 2 < n; i++) {
+        thick_line(pts[i], pts[i + 1], w);
+        fill_circle(pts[i + 1].x, pts[i + 1].y, w / 2);
+    }
+    thick_line(pts[n - 2], base, w);
+    int px_ = -dy * half / len, py_ = dx * half / len;
+    fill_tri(tip, (pt_t){base.x + px_, base.y + py_}, (pt_t){base.x - px_, base.y - py_});
+}
+
+// Stem up from the bottom, then a branch at the given angle (sin/cos x1000, 0 = up).
+static void bend(int cx, int cy, int s, int sn, int cs, bool centered, pt_t out[3]) {
+    bool sharp = cs < -100;
+    int bottom = cy + s * 48 / 100;
+    int my = sharp ? cy - s * 30 / 100 : cy + s * 5 / 100;
+    int L = sharp ? s * 55 / 100 : s * 46 / 100;
+    int x0 = centered ? cx : cx - sn * s * 18 / 100000;
+    out[0] = (pt_t){x0, bottom};
+    out[1] = (pt_t){x0, my};
+    out[2] = (pt_t){x0 + sn * L / 1000, my - cs * L / 1000};
+}
+
+static void draw_icon(uint8_t icon, int cx, int cy, int s) {
+    int w = s * 15 / 100;
+    pt_t p[12];
+    int bottom = cy + s * 48 / 100, mid = cy + s * 5 / 100;
+    switch (icon) {
+        case NAV_LEFT:
+        case NAV_RIGHT:
+        case NAV_SLIGHT_LEFT:
+        case NAV_SLIGHT_RIGHT:
+        case NAV_SHARP_LEFT:
+        case NAV_SHARP_RIGHT: {
+            static const int16_t trig[][2] = {{1000, 0}, {707, 707}, {866, -500}};  // 90, 45, 120 degrees
+            int k = (icon - NAV_LEFT) / 2, sign = (icon - NAV_LEFT) % 2 ? 1 : -1;
+            bend(cx, cy, s, sign * trig[k][0], trig[k][1], false, p);
+            arrow(p, 3, w, s);
+            break;
+        }
+        case NAV_KEEP_LEFT:
+        case NAV_KEEP_RIGHT: {
+            int sign = icon == NAV_KEEP_LEFT ? -1 : 1;
+            bend(cx, cy, s, -sign * 574, 819, true, p);  // 35 degrees
+            thick_line(p[1], p[2], s * 6 / 100);
+            bend(cx, cy, s, sign * 574, 819, true, p);
+            arrow(p, 3, w, s);
+            break;
+        }
+        case NAV_UTURN_LEFT:
+        case NAV_UTURN_RIGHT: {
+            static const int16_t arc[][2] = {{1000, 0}, {866, 500}, {500, 866}, {0, 1000},
+                                             {-500, 866}, {-866, 500}, {-1000, 0}};
+            int sign = icon == NAV_UTURN_LEFT ? 1 : -1, r = s / 5, top = cy - s * 12 / 100, n = 0;
+            p[n++] = (pt_t){cx + sign * r, bottom};
+            for (int i = 0; i < 7; i++) p[n++] = (pt_t){cx + sign * arc[i][0] * r / 1000, top - arc[i][1] * r / 1000};
+            p[n++] = (pt_t){cx - sign * r, cy + s * 30 / 100};
+            arrow(p, n, w, s);
+            break;
+        }
+        case NAV_ROUNDABOUT: {
+            int r = s / 5, oy = cy + s * 4 / 100, t = s / 10;
+            ring(cx, oy, r + t / 2, t);
+            thick_line((pt_t){cx, bottom}, (pt_t){cx, oy + r}, w);
+            p[0] = (pt_t){cx, oy - r};
+            p[1] = (pt_t){cx, cy - s / 2};
+            arrow(p, 2, w, s);
+            break;
+        }
+        case NAV_MERGE:
+            thick_line((pt_t){cx - s * 32 / 100, bottom}, (pt_t){cx, mid - s * 5 / 100}, s * 6 / 100);
+            p[0] = (pt_t){cx, bottom};
+            p[1] = (pt_t){cx, cy - s * 48 / 100};
+            arrow(p, 2, w, s);
+            break;
+        case NAV_ARRIVE: {
+            int oy = cy - s / 10, t = s / 10;
+            ring(cx, oy, s * 26 / 100 + t / 2, t);
+            fill_circle(cx, oy, s / 10);
+            fill_tri((pt_t){cx - s * 12 / 100, cy + s * 14 / 100}, (pt_t){cx, cy + s * 46 / 100},
+                     (pt_t){cx + s * 12 / 100, cy + s * 14 / 100});
+            break;
+        }
+        default:  // straight
+            p[0] = (pt_t){cx, bottom};
+            p[1] = (pt_t){cx, cy - s * 48 / 100};
+            arrow(p, 2, w, s);
+            break;
+    }
+}
+
+/* ---------- text ---------- */
+
+static uint16_t utf8_next(const char* s, int len, int* i) {
+    uint8_t c = (uint8_t)s[(*i)++];
+    if (c < 0x80) return c;
+    int extra = c >= 0xE0 ? 2 : 1;
+    uint16_t cp = c & (extra == 2 ? 0x0F : 0x1F);
+    while (extra-- && *i < len) cp = (cp << 6) | ((uint8_t)s[(*i)++] & 0x3F);
+    return cp;
+}
+
+static const font_glyph_t* glyph(const font_t* f, uint16_t cp) {
+    int lo = 0, hi = f->count - 1;
+    while (lo <= hi) {
+        int m = (lo + hi) / 2;
+        if (f->glyphs[m].cp == cp) return &f->glyphs[m];
+        if (f->glyphs[m].cp < cp)
+            lo = m + 1;
+        else
+            hi = m - 1;
+    }
+    return cp == '?' ? NULL : glyph(f, '?');
+}
+
+static int text_width(const font_t* f, const char* s, int len) {
+    int w = 0, i = 0;
+    while (i < len) {
+        const font_glyph_t* g = glyph(f, utf8_next(s, len, &i));
+        if (g) w += g->adv;
+    }
+    return w;
+}
+
+static int draw_text(const font_t* f, int x, int base, const char* s, int len) {
+    int i = 0;
+    while (i < len) {
+        const font_glyph_t* g = glyph(f, utf8_next(s, len, &i));
+        if (!g) continue;
+        const uint8_t* bm = f->bitmap + g->off;
+        for (int r = 0, k = 0; r < g->h; r++)
+            for (int c = 0; c < g->w; c++, k++)
+                if (bm[k >> 3] & (0x80 >> (k & 7))) px(x + g->xo + c, base + g->yo + r);
+        x += g->adv;
+    }
+    return x;
+}
+
+static void draw_text_center(const font_t* f, int cx, int base, const char* s) {
+    int len = strlen(s);
+    draw_text(f, cx - text_width(f, s, len) / 2, base, s, len);
+}
+
+static void draw_text_right(const font_t* f, int right, int base, const char* s) {
+    int len = strlen(s);
+    draw_text(f, right - text_width(f, s, len), base, s, len);
+}
+
+// Word-wrap into at most max_lines lines, ending with an ellipsis if it doesn't fit.
+static void draw_wrapped(const font_t* f, int x, int base, int line_h, int max_w, int max_lines, const char* s,
+                         int len) {
+    static const char ell[] = "\xE2\x80\xA6";
+    int pos = 0;
+    for (int line = 0; line < max_lines && pos < len; line++) {
+        while (pos < len && s[pos] == ' ') pos++;
+        int start = pos, i = pos, brk = -1, w = 0;
+        while (i < len) {
+            int j = i;
+            uint16_t cp = utf8_next(s, len, &j);
+            if (cp == ' ') brk = i;
+            const font_glyph_t* g = glyph(f, cp);
+            int gw = g ? g->adv : 0;
+            if (w + gw > max_w) break;
+            w += gw;
+            i = j;
+        }
+        int end, next;
+        if (i >= len) {
+            end = next = len;
+        } else if (brk > start) {
+            end = brk;
+            next = brk + 1;
+        } else {
+            end = next = i;
+        }
+        if (line == max_lines - 1 && next < len) {
+            int ew = text_width(f, ell, 3);
+            end = i;
+            while (end > start && text_width(f, s + start, end - start) + ew > max_w) {
+                end--;
+                while (end > start && ((uint8_t)s[end] & 0xC0) == 0x80) end--;
             }
-            GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
-            GFX_setTextColor(gfx, work ? GFX_BLACK : GFX_RED, GFX_WHITE);
-            GFX_setCursor(gfx, bx + (large ? 31 : 22), by + 3);
-            GFX_printf(gfx, "%s", work ? "班" : "休");
+            int xe = draw_text(f, x, base + line * line_h, s + start, end - start);
+            draw_text(f, xe, base + line * line_h, ell, 3);
+            return;
         }
+        draw_text(f, x, base + line * line_h, s + start, end - start);
+        pos = next;
     }
 }
 
-static void DrawCalendar(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar, gui_data_t* data) {
-    bool large = large_layout(data);
-    DrawDateHeader(gfx, 10, large ? 38 : 28, tm, Lunar, data);
-    DrawWeekHeader(gfx, 10, large ? 44 : 32, data);
-    DrawMonthDays(gfx, 10, large ? 84 : 64, tm, Lunar, data);
-}
+/* ---------- formatting ---------- */
 
-// clang-format off
-/* Routine to Draw Large 7-Segment formated number
-   Contributed by William Zaggle.
-
-   int n - The number to be displayed
-   int xLoc = The x location of the upper left corner of the number
-   int yLoc = The y location of the upper left corner of the number
-   int cS = The size of the number. 
-   fC is the foreground color of the number
-   bC is the background color of the number (prevents having to clear previous space)
-   nD is the number of digit spaces to occupy (must include space for minus sign for numbers < 0).
-
-   width: nD*(11*cS+2)-2*cS
-   height: 20*cS+4
-
-   https://forum.arduino.cc/t/fast-7-segment-number-display-for-tft/296619/4
-*/
-static void Draw7Number(Adafruit_GFX *gfx, int16_t n, uint16_t xLoc, uint16_t yLoc, int16_t cS, uint16_t fC, uint16_t bC, int16_t nD) {
-    uint16_t num=abs(n),i,t,w,col,h,a,b,j=1,d=0,S2=5*cS,S3=2*cS,S4=7*cS,x1=cS+1,x2=S3+S2+1,y1=yLoc+x1,y3=yLoc+S3+S4+1;
-    uint16_t seg[7][3]={{x1,yLoc,1},{x2,y1,0},{x2,y3+x1,0},{x1,(2*y3)-yLoc,1},{0,y3+x1,0},{0,y1,0},{x1,y3,1}};
-    uint8_t nums[12]={0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F,0x00,0x40},c=(c=abs(cS))>10?10:(c<1)?1:c,cnt=(cnt=abs(nD))>10?10:(cnt<1)?1:cnt;
-    for (xLoc+=cnt*(d=S2+(3*S3)+2);cnt>0;cnt--){
-      for (i=(num>9)?num%10:((!cnt)&&(n<0))?11:((nD<0)&&(!num))?10:num,xLoc-=d,num/=10,j=0;j<7;++j){
-        col=(nums[i]&(1<<j))?fC:bC;
-        if (seg[j][2])for(w=S2,t=seg[j][1]+S3,h=seg[j][1]+cS,a=xLoc+seg[j][0]+cS,b=seg[j][1];b<h;b++,a--,w+=2)GFX_drawFastHLine(gfx,a,b,w,col);
-        else for(w=S4,t=xLoc+seg[j][0]+S3,h=xLoc+seg[j][0]+cS,b=xLoc+seg[j][0],a=seg[j][1]+cS;b<h;b++,a--,w+=2)GFX_drawFastVLine(gfx,b,a,w,col);
-        for (;b<t;b++,a++,w-=2)seg[j][2]?GFX_drawFastHLine(gfx,a,b,w,col):GFX_drawFastVLine(gfx,b,a,w,col);
-        }
-    }
-}
-// clang-format on
-
-static void DrawTime(Adafruit_GFX* gfx, tm_t* tm, int16_t x, int16_t y, uint16_t cS, uint16_t nD) {
-    Draw7Number(gfx, tm->tm_hour, x, y, cS, GFX_BLACK, GFX_WHITE, nD);
-    x += (nD * (11 * cS + 2) - 2 * cS) + 2 * cS;
-    GFX_fillRect(gfx, x, y + 4.5 * cS + 1, 2 * cS, 2 * cS, GFX_BLACK);
-    GFX_fillRect(gfx, x, y + 13.5 * cS + 3, 2 * cS, 2 * cS, GFX_BLACK);
-    x += 4 * cS;
-    Draw7Number(gfx, tm->tm_min, x, y, cS, GFX_BLACK, GFX_WHITE, nD);
-}
-
-static void DrawClock(Adafruit_GFX* gfx, tm_t* tm, struct Lunar_Date* Lunar, gui_data_t* data) {
-    uint8_t padding = large_layout(data) ? 100 : 40;
-    GFX_setCursor(gfx, padding, 36);
-    GFX_printf_styled(gfx, GFX_RED, GFX_WHITE, u8g2_font_helvB18_tn, "%d", tm->tm_year + YEAR0);
-    GFX_printf_styled(gfx, GFX_BLACK, GFX_WHITE, u8g2_font_wqy12_t_lunar, "年");
-    GFX_printf_styled(gfx, GFX_RED, GFX_WHITE, u8g2_font_helvB18_tn, "%02d", tm->tm_mon + 1);
-    GFX_printf_styled(gfx, GFX_BLACK, GFX_WHITE, u8g2_font_wqy12_t_lunar, "月");
-    GFX_printf_styled(gfx, GFX_RED, GFX_WHITE, u8g2_font_helvB18_tn, "%02d", tm->tm_mday);
-    GFX_printf_styled(gfx, GFX_BLACK, GFX_WHITE, u8g2_font_wqy12_t_lunar, "日 ");
-
-    GFX_setCursor(gfx, padding, 58);
-    GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
-    GFX_printf(gfx, "星期%s", Lunar_DayString[tm->tm_wday]);
-    GFX_setCursor(gfx, 138, 58);
-    GFX_printf(gfx, "%s%s%s", Lunar_MonthLeapString[Lunar->IsLeap], Lunar_MonthString[Lunar->Month],
-               Lunar_DateString[Lunar->Date]);
-
-    DrawBattery(gfx, data->width - padding, 25, 20, data->voltage);
-
-    char ssid[5] = {0};
-    int16_t ssid_len = strlen(data->ssid);
-    int16_t sw = GFX_getUTF8Width(gfx, "25℃[1234]");
-    memcpy(ssid, &data->ssid[ssid_len - 4], 4);
-    GFX_setCursor(gfx, data->width - padding - sw - 2, 58);
-    GFX_setFont(gfx, u8g2_font_wqy9_t_lunar);
-    GFX_printf(gfx, "%d℃[%s]", data->temperature, ssid);
-
-    GFX_drawFastHLine(gfx, padding - 10, 68, data->width - 2 * (padding - 10), GFX_BLACK);
-
-    uint16_t cS = data->height / 45;
-    uint16_t nD = 2;
-    uint16_t time_width = 2 * (nD * (11 * cS + 2) - 2 * cS) + 4 * cS;
-    uint16_t time_height = 20 * cS + 4;
-    int16_t time_x = (data->width - time_width) / 2;
-    int16_t time_y = (68 + (data->height - 68)) / 2 - time_height / 2;
-    DrawTime(gfx, tm, time_x, time_y, cS, nD);
-
-    GFX_drawFastHLine(gfx, padding - 10, data->height - 68, data->width - 2 * (padding - 10), GFX_BLACK);
-
-    GFX_setCursor(gfx, padding, data->height - 68 + 30);
-    GFX_setFont(gfx, u8g2_font_wqy12_t_lunar);
-    GFX_printf(gfx, "%s%s", Lunar_StemStrig[LUNAR_GetStem(Lunar)], Lunar_BranchStrig[LUNAR_GetBranch(Lunar)]);
-    GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
-    GFX_printf(gfx, "%s", Lunar_ZodiacString[LUNAR_GetZodiac(Lunar)]);
-    GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
-    GFX_printf(gfx, "年");
-
-    GFX_setCursor(gfx, padding, data->height - 68 + 30 + 20);
-    GFX_printf(gfx, "%d周", GetWeekOfYear(tm->tm_year, tm->tm_mon, tm->tm_mday, tm->tm_wday));
-
-    uint8_t day = 0;
-    uint8_t JQday = GetJieQiStr(tm->tm_year + YEAR0, tm->tm_mon + 1, tm->tm_mday, &day);
-    if (day == 0) {
-        GFX_setCursor(gfx, data->width - GFX_getUTF8Width(gfx, "小暑") - padding, data->height - 68 + 30);
-        GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
-        GFX_printf(gfx, "%s", JieQiStr[JQday % 24]);
-    } else {
-        GFX_setCursor(gfx, data->width - GFX_getUTF8Width(gfx, "离小暑") - padding, data->height - 68 + 30);
-        GFX_printf(gfx, "离%");
-        GFX_setTextColor(gfx, GFX_RED, GFX_WHITE);
-        GFX_printf(gfx, "%s", JieQiStr[JQday % 24]);
-        GFX_setTextColor(gfx, GFX_BLACK, GFX_WHITE);
-        char buf[15] = {0};
-        snprintf(buf, sizeof(buf), "还有%d天", day);
-        GFX_setCursor(gfx, data->width - GFX_getUTF8Width(gfx, buf) - padding, data->height - 68 + 30 + 20);
-        GFX_printf(gfx, buf);
-    }
-}
-
-void DrawGUI(gui_data_t* data, buffer_callback callback, void* callback_data) {
-    if (data->week_start > 6) data->week_start = 0;
-
-    tm_t tm = {0};
-    struct Lunar_Date Lunar;
-
-    transformTime(data->timestamp, &tm);
-
-    Adafruit_GFX gfx;
-    int16_t ph = (__HEAP_SIZE - 512) / (data->width / 8);
-
-    if (data->color == 2)
-        GFX_begin_3c(&gfx, data->width, data->height, ph);
-    else if (data->color == 3)
-        GFX_begin_4c(&gfx, data->width, data->height, ph);
-    else
-        GFX_begin(&gfx, data->width, data->height, ph);
-
-    GFX_firstPage(&gfx);
+static char* put_uint(char* p, uint32_t v, int min_digits) {
+    char tmp[10];
+    int n = 0;
     do {
-        GFX_fillScreen(&gfx, GFX_WHITE);
+        tmp[n++] = '0' + v % 10;
+        v /= 10;
+    } while (v || n < min_digits);
+    while (n) *p++ = tmp[--n];
+    *p = 0;
+    return p;
+}
 
-        LUNAR_SolarToLunar(&Lunar, tm.tm_year + YEAR0, tm.tm_mon + 1, tm.tm_mday);
+static char* put_str(char* p, const char* s) {
+    while (*s) *p++ = *s++;
+    *p = 0;
+    return p;
+}
 
-        switch (data->mode) {
-            case MODE_CALENDAR:
-                DrawCalendar(&gfx, &tm, &Lunar, data);
-                break;
-            case MODE_CLOCK:
-                DrawClock(&gfx, &tm, &Lunar, data);
-                break;
-            default:
-                break;
-        }
-        if ((data->mode == MODE_CALENDAR || data->mode == MODE_CLOCK) &&
-            (tm.tm_year + YEAR0 == 2025 && tm.tm_mon + 1 == 1)) {
-            DrawTimeSyncTip(&gfx, data);
-        }
-    } while (GFX_nextPage(&gfx, callback, callback_data));
+static void fmt_dist(char* p, uint32_t m) {
+    if (m >= 10000) {
+        p = put_uint(p, (m + 500) / 1000, 1);
+        put_str(p, " km");
+    } else if (m >= 1000) {
+        p = put_uint(p, m / 1000, 1);
+        *p++ = ',';
+        p = put_uint(p, (m % 1000) / 100, 1);
+        put_str(p, " km");
+    } else {
+        p = put_uint(p, m >= 100 ? (m + 5) / 10 * 10 : (m + 2) / 5 * 5, 1);
+        put_str(p, " m");
+    }
+}
 
-    GFX_end(&gfx);
+static void fmt_hm(char* p, uint8_t h, uint8_t m) {
+    p = put_uint(p, h, 2);
+    *p++ = ':';
+    put_uint(p, m, 2);
+}
+
+/* ---------- screens ---------- */
+
+static void clear(void) { memset(fb, 0xFF, sizeof(fb)); }
+
+void gui_draw_nav(const nav_data_t* nav) {
+    char buf[40];
+    clear();
+    if (nav->flags & NAV_FLAG_ARRIVED) {
+        draw_icon(NAV_ARRIVE, 52, 60, 84);
+        static const char arrived[] = "\xC4\x90\xC3\xA3 \xC4\x91\xE1\xBA\xBFn n\xC6\xA1i";  // "Đã đến nơi"
+        draw_text(&font_text, 112, 58, arrived, sizeof(arrived) - 1);
+        return;
+    }
+    draw_icon(nav->icon, 50, 46, 76);
+
+    fmt_dist(buf, nav->dist_m);
+    if (text_width(&font_big, buf, strlen(buf)) <= 98)
+        draw_text_center(&font_big, 50, 116, buf);
+    else
+        draw_text_center(&font_text, 50, 114, buf);
+
+    fill_rect(102, 4, 2, 116);
+    draw_wrapped(&font_text, 110, 17, 19, 136, 4, nav->text, nav->text_len);
+
+    char* p = put_str(buf, "C\xC3\xB2n ");  // "Còn "
+    fmt_dist(p, (uint32_t)nav->remain_10m * 10);
+    p += strlen(p);
+    p = put_str(p, " \xC2\xB7 ");  // " · "
+    fmt_hm(p, nav->eta_h, nav->eta_m);
+    draw_text(&font_small, 110, 117, buf, strlen(buf));
+}
+
+typedef struct {
+    uint16_t year;
+    uint8_t month, day, wday, hour, min;
+} civil_t;
+
+static civil_t to_civil(uint32_t ts) {
+    civil_t c;
+    uint32_t days = ts / 86400, secs = ts % 86400;
+    c.hour = secs / 3600;
+    c.min = secs % 3600 / 60;
+    c.wday = (days + 4) % 7;  // 1970-01-01 was a Thursday
+    uint32_t z = days + 719468, era = z / 146097, doe = z - era * 146097;
+    uint32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    uint32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
+    c.day = doy - (153 * mp + 2) / 5 + 1;
+    c.month = mp < 10 ? mp + 3 : mp - 9;
+    c.year = yoe + era * 400 + (c.month <= 2);
+    return c;
+}
+
+static const char* const weekdays[] = {
+    "Ch\xE1\xBB\xA7 nh\xE1\xBA\xADt",  // Chủ nhật
+    "Th\xE1\xBB\xA9 Hai", "Th\xE1\xBB\xA9 Ba", "Th\xE1\xBB\xA9 T\xC6\xB0",  // Thứ Hai, Thứ Ba, Thứ Tư
+    "Th\xE1\xBB\xA9 N\xC4\x83m", "Th\xE1\xBB\xA9 S\xC3\xA1u",               // Thứ Năm, Thứ Sáu
+    "Th\xE1\xBB\xA9 B\xE1\xBA\xA3y",                                        // Thứ Bảy
+};
+
+static void draw_status(uint16_t mv, int8_t temp) {
+    char buf[12], *p = buf;
+    if (temp < 0) *p++ = '-';
+    p = put_uint(p, temp < 0 ? -temp : temp, 1);
+    put_str(p, "\xC2\xB0" "C");
+    draw_text(&font_small, 6, 120, buf, strlen(buf));
+    p = put_uint(buf, mv / 1000, 1);
+    *p++ = '.';
+    p = put_uint(p, mv % 1000 / 10, 2);
+    put_str(p, "V");
+    draw_text_right(&font_small, 244, 120, buf);
+}
+
+static bool time_synced(uint32_t ts) { return ts > 1704067200; }  // after 2024-01-01
+
+void gui_draw_clock(uint32_t ts, uint16_t mv, int8_t temp) {
+    char buf[40];
+    civil_t c = to_civil(ts);
+    clear();
+    fmt_hm(buf, c.hour, c.min);
+    draw_text_center(&font_huge, 125, 68, buf);
+    if (time_synced(ts)) {
+        char* p = put_str(buf, weekdays[c.wday]);
+        p = put_str(p, ", ");
+        p = put_uint(p, c.day, 2);
+        *p++ = '/';
+        p = put_uint(p, c.month, 2);
+        *p++ = '/';
+        put_uint(p, c.year, 4);
+        draw_text_center(&font_text, 125, 96, buf);
+    } else {
+        draw_text_center(&font_text, 125, 96, "Ch\xC6\xB0" "a \xC4\x91\xE1\xBB\x93ng b\xE1\xBB\x99 gi\xE1\xBB\x9D");
+    }
+    draw_status(mv, temp);
+}
+
+void gui_draw_date(uint32_t ts, uint16_t mv, int8_t temp) {
+    char buf[24];
+    civil_t c = to_civil(ts);
+    clear();
+    put_uint(buf, c.day, 2);
+    draw_text_center(&font_huge, 64, 78, buf);
+    fill_rect(126, 16, 2, 80);
+    draw_text(&font_text, 140, 40, weekdays[c.wday], strlen(weekdays[c.wday]));
+    char* p = put_str(buf, "Th\xC3\xA1ng ");  // "Tháng "
+    put_uint(p, c.month, 1);
+    draw_text(&font_text, 140, 64, buf, strlen(buf));
+    put_uint(buf, c.year, 4);
+    draw_text(&font_text, 140, 88, buf, 4);
+    draw_status(mv, temp);
 }
