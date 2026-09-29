@@ -88,6 +88,14 @@ button, input, select { font: inherit; color: inherit; letter-spacing: inherit; 
 .paper {
   background: var(--paper); border-radius: 14px; padding: 12px; display: flex; justify-content: center;
 }
+.paper canvas.editable { touch-action: none; cursor: grab; }
+.paper canvas.editable:active { cursor: grabbing; }
+.zoom { display: flex; align-items: center; gap: 8px; }
+.zoom button {
+  width: 34px; height: 30px; border: 0; border-radius: 8px; background: var(--fill); color: var(--label);
+  font-size: 19px; font-weight: 500; line-height: 1; cursor: pointer;
+}
+.zoom button:disabled { opacity: .35; cursor: default; }
 .paper canvas {
   width: 100%; height: auto; aspect-ratio: 250 / 128; image-rendering: pixelated; image-rendering: crisp-edges;
   background: #fff; border-radius: 4px; box-shadow: 0 0 0 .5px rgba(0, 0, 0, .12);
@@ -267,16 +275,25 @@ progress[hidden] { display: none; }
 
     <div class="group-title">Ảnh</div>
     <div class="hero" style="margin-bottom:12px">
-      <div class="paper"><canvas id="imgOut" width="250" height="128" aria-label="Xem trước ảnh"></canvas></div>
+      <div class="paper"><canvas id="imgOut" class="editable" width="250" height="128" aria-label="Xem trước ảnh — kéo để di chuyển, chụm hai ngón để phóng to"></canvas></div>
       <progress id="imgProgress" max="100" value="0" hidden></progress>
     </div>
     <div class="group">
+      <div class="row">
+        <span class="grow">Thu phóng</span>
+        <div class="zoom">
+          <button id="btnZoomOut" type="button" aria-label="Thu nhỏ" disabled>−</button>
+          <span id="zoomVal" class="value" style="min-width:44px;text-align:center">100%</span>
+          <button id="btnZoomIn" type="button" aria-label="Phóng to" disabled>+</button>
+        </div>
+        <button id="btnImgReset" class="link" type="button" disabled>Đặt lại</button>
+      </div>
       <label class="row">
         <span class="grow">Dùng màu đỏ</span>
         <input id="imgRed" class="switch" type="checkbox" checked>
       </label>
     </div>
-    <p id="imgFoot" class="foot">Ảnh được cắt vừa màn 250×128 và chuyển sang đen, trắng, đỏ.</p>
+    <p id="imgFoot" class="foot">Kéo ảnh để di chuyển, chụm hoặc mở hai ngón để thu phóng. Ảnh được chuyển sang đen, trắng, đỏ.</p>
     <div class="btns">
       <button id="btnPick" class="btn tinted" type="button">Chọn ảnh</button>
       <button id="btnRotate" class="btn tinted" type="button" disabled>Xoay</button>
@@ -1383,7 +1400,8 @@ function stopNav(arrived) {
  * ================================================================ */
 const imgOut = $('imgOut');
 const imgCtx = imgOut.getContext('2d', { willReadFrequently: true });
-const img = { src: null, rot: 0 };
+const img = { src: null, rot: 0, zoom: 1, ox: 0, oy: 0 };  // zoom relative to "fill the panel"; offsets in panel px
+const ZOOM_MIN = 0.3, ZOOM_MAX = 8;
 
 function renderImage() {
   imgCtx.fillStyle = '#fff';
@@ -1397,10 +1415,10 @@ function renderImage() {
   }
   const iw = img.src.naturalWidth, ih = img.src.naturalHeight;
   const rw = img.rot % 180 ? ih : iw, rh = img.rot % 180 ? iw : ih;
-  const s = Math.max(W / rw, H / rh);  // cover: fill the whole panel
+  const s = Math.max(W / rw, H / rh) * img.zoom;  // zoom 1 = fill the whole panel
   imgCtx.save();
   imgCtx.imageSmoothingQuality = 'high';
-  imgCtx.translate(W / 2, H / 2);
+  imgCtx.translate(W / 2 + img.ox, H / 2 + img.oy);
   imgCtx.rotate(img.rot * Math.PI / 180);
   imgCtx.scale(s, s);
   imgCtx.drawImage(img.src, -iw / 2, -ih / 2);
@@ -1408,14 +1426,83 @@ function renderImage() {
   const data = imgCtx.getImageData(0, 0, W, H);
   quantize(data, { palette: $('imgRed').checked ? 'bwr' : 'bw', algo: 'fs', thresh: 128, redSens: 80 });
   imgCtx.putImageData(data, 0, 0);
+  $('zoomVal').textContent = Math.round(img.zoom * 100) + '%';
+}
+
+let imgFrame = 0;
+function renderImageSoon() {
+  if (!imgFrame) imgFrame = requestAnimationFrame(() => { imgFrame = 0; renderImage(); });
+}
+
+// Zoom by factor k keeping the panel point (px, py) fixed (default: centre).
+function zoomImage(k, px = W / 2, py = H / 2) {
+  const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, img.zoom * k));
+  k = z / img.zoom;
+  img.ox = (img.ox + W / 2 - px) * k + px - W / 2;
+  img.oy = (img.oy + H / 2 - py) * k + py - H / 2;
+  img.zoom = z;
+  renderImageSoon();
+}
+
+function resetImageView() {
+  Object.assign(img, { zoom: 1, ox: 0, oy: 0 });
+  renderImage();
+}
+
+// Pointer gestures on the preview: one finger pans, two fingers pinch-zoom (and pan).
+function initImageGestures() {
+  const cv = $('imgOut');
+  const pts = new Map();
+  let last = null;  // previous gesture state {x, y, d}
+  const toPanel = (cx, cy) => {
+    const r = cv.getBoundingClientRect();
+    return { x: (cx - r.left) * W / r.width, y: (cy - r.top) * H / r.height };
+  };
+  const gesture = () => {
+    const p = [...pts.values()];
+    if (p.length === 1) return { x: p[0].x, y: p[0].y, d: 0 };
+    return { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2, d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) };
+  };
+  cv.addEventListener('pointerdown', e => {
+    if (!img.src) return;
+    cv.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, toPanel(e.clientX, e.clientY));
+    last = gesture();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, toPanel(e.clientX, e.clientY));
+    const g = gesture();
+    if (last) {
+      img.ox += g.x - last.x;
+      img.oy += g.y - last.y;
+      if (g.d && last.d) zoomImage(g.d / last.d, g.x, g.y);
+      else renderImageSoon();
+    }
+    last = g;
+  });
+  const end = e => {
+    pts.delete(e.pointerId);
+    last = pts.size ? gesture() : null;
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', end);
+  cv.addEventListener('wheel', e => {
+    if (!img.src) return;
+    e.preventDefault();
+    const p = toPanel(e.clientX, e.clientY);
+    zoomImage(Math.exp(-e.deltaY / 400), p.x, p.y);
+  }, { passive: false });
+  // Keep iOS from zooming the whole page while pinching the preview.
+  ['gesturestart', 'gesturechange'].forEach(t => cv.addEventListener(t, e => e.preventDefault()));
 }
 
 function loadImage(file) {
   if (!file || !file.type.startsWith('image/')) return;
   const el = new Image();
   el.onload = () => {
-    img.src = el; img.rot = 0;
-    $('btnRotate').disabled = false;
+    Object.assign(img, { src: el, rot: 0, zoom: 1, ox: 0, oy: 0 });
+    ['btnRotate', 'btnZoomIn', 'btnZoomOut', 'btnImgReset'].forEach(id => { $(id).disabled = false; });
     $('btnSendImg').disabled = false;
     renderImage();
   };
@@ -1533,6 +1620,10 @@ function init() {
   $('btnPick').onclick = () => $('imgFile').click();
   $('imgFile').onchange = e => loadImage(e.target.files[0]);
   $('btnRotate').onclick = () => { img.rot = (img.rot + 90) % 360; renderImage(); };
+  $('btnZoomIn').onclick = () => zoomImage(1.25);
+  $('btnZoomOut').onclick = () => zoomImage(0.8);
+  $('btnImgReset').onclick = resetImageView;
+  initImageGestures();
   $('imgRed').onchange = renderImage;
   $('btnSendImg').onclick = sendImage;
   renderImage();
