@@ -24,6 +24,29 @@ static const uint8_t sketch_left[] = {
     69, 48, 21, 3, 3, 2, 69, 48, 67, 3, 3, 2, 69, 48, 24, 50, 9, 3, 70, 76, 69, 48, 102, 47,
 };
 
+static uint8_t black_plane[GUI_BUF_SIZE];
+
+// Render a two-pass (black + red) screen to a colour PPM.
+static void dump_color(const char* path, void (*draw)(uint32_t, uint16_t, int8_t), uint32_t ts, uint16_t mv, int8_t t) {
+    gui_set_red_pass(false);
+    draw(ts, mv, t);
+    memcpy(black_plane, gui_buffer(), GUI_BUF_SIZE);
+    gui_set_red_pass(true);
+    draw(ts, mv, t);
+    gui_set_red_pass(false);
+    const uint8_t* red = gui_buffer();
+    FILE* f = fopen(path, "w");
+    fprintf(f, "P3\n%d %d\n255\n", GUI_W, GUI_H);
+    for (int y = 0; y < GUI_H; y++)
+        for (int x = 0; x < GUI_W; x++) {
+            int i = (GUI_W - 1 - x) * (GUI_H / 8) + (y >> 3), m = 0x80 >> (y & 7);
+            if (!(red[i] & m)) fputs("220 0 0 ", f);
+            else if (!(black_plane[i] & m)) fputs("0 0 0 ", f);
+            else fputs("255 255 255 ", f);
+        }
+    fclose(f);
+}
+
 static uint16_t nav_scroll;
 
 static void nav(const char* path, uint8_t icon, uint16_t dist, const char* text, uint8_t flags) {
@@ -56,6 +79,14 @@ int main(void) {
         snprintf(p, sizeof p, "build/icon_%02d.pbm", i);
         nav(p, i, 80, "Đi thẳng", 0);
     }
+    // 2026-10-10 21:13 local (UTC+7), Saturday, lunar 1/9 Bính Ngọ
+    dump_color("build/clock_a.ppm", gui_draw_clock, 1791641580 + 7 * 3600, 2950, 27);
+    // 2025-07-30 08:05: lunar 6 nhuận (leap month), month starting on Tuesday, 6 calendar rows check
+    dump_color("build/clock_b.ppm", gui_draw_clock, 1753837500 + 7 * 3600, 2700, 31);
+    // 2026-02-17 00:00 Tết Bính Ngọ
+    dump_color("build/clock_c.ppm", gui_draw_clock, 1771261200 + 7 * 3600, 3000, 18);
+    // 2026-08-31: a 6-row month (August 2026 starts on Saturday)
+    dump_color("build/clock_d.ppm", gui_draw_clock, 1788152400 + 7 * 3600, 2400, 33);
     gui_draw_clock(1790000000 + 7 * 3600, 2950, 27);
     dump("build/clock.pbm");
     gui_draw_date(1790000000 + 7 * 3600, 2950, 27);

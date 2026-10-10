@@ -11,7 +11,11 @@ cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×
   nhãn tự vẽ bằng font tiếng Việt. Các lệnh đến dồn dập được gộp, chỉ vẽ bản mới nhất.
 - **Refresh nhanh đen trắng** (thử nghiệm, LUT nạp từ host) cho chỉ đường và đồng hồ, cứ 20 lần thì
   refresh toàn màn một lần để xoá bóng mờ. Tắt/bật và đổi chu kỳ trong tab *Nâng cao* của web (`0x41`).
-- Màn **Đồng hồ** và **Lịch** (ngày, thứ tiếng Việt, nhiệt độ, biểu tượng pin kèm %) thay cho lịch âm tiếng Trung.
+- Màn **Đồng hồ**: lịch tháng bên trái (dải đỏ tên tháng, hôm nay ô đen, Chủ Nhật đỏ), đồng hồ bên phải, ngày âm lịch
+  Việt Nam (đỏ) và năm can chi bên dưới, nhiệt độ và pin kèm %. Refresh 3 màu mỗi giờ tròn (kể cả 0 giờ đổi ngày),
+  các phút khác refresh nhanh đen trắng không chạm vào điểm ảnh đứng yên nên màu đỏ được giữ nguyên.
+  Âm lịch tra bảng 2024–2063 (`tools/gen_lunar.py`, thuật toán Hồ Ngọc Đức, UTC+7).
+- Màn **Lịch**: ngày lớn, thứ, tháng, năm.
 - Giữ tương thích với web hiện tại: model 2, gói cấu hình báo panel `0x21`, lệnh ghi ảnh `0x30`
   cùng cách đặt cờ (`0x0f` lớp đen, `0xf0` gói tiếp theo), đồng bộ giờ `0x20`, lịch/đồng hồ.
 - Vẫn có **nạp qua Bluetooth không cần nút** (Secure DFU) để cập nhật lần sau.

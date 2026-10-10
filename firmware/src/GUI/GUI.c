@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "font.h"
+#include "lunar.h"
 
 // Landscape 250x128 canvas over the panel's native 128x250 RAM layout.
 // Content stays inside rows 2..121: the glass only shows 122 of the 128 sources.
@@ -17,17 +18,25 @@ typedef struct {
 
 /* ---------- raster primitives (black on white) ---------- */
 
-static bool m_ink_white;  // draw white on black (inverted panel) instead of black on white
+// Ink of the next drawing calls. A frame is drawn twice: once for the black/white RAM and,
+// for screens with red, once more for the red RAM; each pass marks only "its" ink.
+enum { INK_BLACK, INK_WHITE, INK_RED };
+static uint8_t m_ink = INK_BLACK;
+static bool m_red_pass, m_red_as_black;
+
+void gui_set_red_pass(bool red) { m_red_pass = red; }
+void gui_set_red_as_black(bool on) { m_red_as_black = on; }
 
 static int m_clip_l = 0, m_clip_r = GUI_W - 1;  // horizontal clip (marquee text)
 
 static void px(int x, int y) {
     if ((unsigned)x >= GUI_W || (unsigned)y >= GUI_H || x < m_clip_l || x > m_clip_r) return;
     uint8_t* b = &fb[(GUI_W - 1 - x) * (GUI_H / 8) + (y >> 3)];
-    if (m_ink_white)
-        *b |= 0x80 >> (y & 7);
-    else
+    bool on = m_red_pass ? m_ink == INK_RED : (m_ink == INK_BLACK || (m_red_as_black && m_ink == INK_RED));
+    if (on)
         *b &= ~(0x80 >> (y & 7));
+    else
+        *b |= 0x80 >> (y & 7);
 }
 
 static void hline(int x0, int x1, int y) {
@@ -399,9 +408,9 @@ static void draw_sketch(const nav_data_t* nav) {
     if (jy + dy + 6 <= SKETCH_H) {
         int cx = SKETCH_X + jx, cy = SKETCH_Y + jy + dy;
         fill_circle(cx, cy, 7);
-        m_ink_white = true;
+        m_ink = INK_WHITE;
         fill_circle(cx, cy, 4);
-        m_ink_white = false;
+        m_ink = INK_BLACK;
     }
 }
 
@@ -425,7 +434,7 @@ void gui_draw_nav(const nav_data_t* nav) {
     bool imminent = nav->dist_m <= 50;
     if (imminent) {
         fill_rect(0, 0, 104, GUI_H);
-        m_ink_white = true;
+        m_ink = INK_WHITE;
     }
     draw_icon(nav->icon, 50, 44, 72);
 
@@ -447,7 +456,7 @@ void gui_draw_nav(const nav_data_t* nav) {
         else
             draw_text_center(&font_text, 50, 116, buf);
     }
-    m_ink_white = false;
+    m_ink = INK_BLACK;
 
     fill_rect(102, 4, 2, 116);
     if ((nav->flags & NAV_FLAG_SHAPE) && nav->shape_len >= 4) {
@@ -537,25 +546,112 @@ static void draw_status(uint16_t mv, int8_t temp) {
 
 static bool time_synced(uint32_t ts) { return ts > 1704067200; }  // after 2024-01-01
 
-void gui_draw_clock(uint32_t ts, uint16_t mv, int8_t temp) {
-    char buf[40];
-    civil_t c = to_civil(ts);
-    clear();
-    fmt_hm(buf, c.hour, c.min);
-    draw_text_center(&font_huge, 125, 68, buf);
-    if (time_synced(ts)) {
-        char* p = put_str(buf, weekdays[c.wday]);
-        p = put_str(p, ", ");
-        p = put_uint(p, c.day, 2);
-        *p++ = '/';
-        p = put_uint(p, c.month, 2);
-        *p++ = '/';
-        put_uint(p, c.year, 4);
-        draw_text_center(&font_text, 125, 96, buf);
-    } else {
-        draw_text_center(&font_text, 125, 96, "Ch\xC6\xB0" "a \xC4\x91\xE1\xBB\x93ng b\xE1\xBB\x99 gi\xE1\xBB\x9D");
+/* ---------- clock + calendar (design 1) ----------
+ * Left: month calendar with a red title band, today in a black box, Sundays red.
+ * Right: weekday, large clock, lunar date in red and the year's name. Red only changes
+ * once a day, so minutes can use the black/white fast refresh. */
+
+static void text_top_center(const font_t* f, int cx, int top, const char* s) { draw_text_center(f, cx, top + f->ascent, s); }
+
+static const char* const weekdays_upper[] = {"CHỦ NHẬT", "THỨ HAI", "THỨ BA", "THỨ TƯ", "THỨ NĂM", "THỨ SÁU", "THỨ BẢY"};
+
+static uint8_t days_in_month(uint16_t y, uint8_t m) {
+    static const uint8_t dim[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    bool leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    return dim[m - 1] + (m == 2 && leap);
+}
+
+static void draw_month(const civil_t* c, uint32_t days) {
+    char buf[24], *p;
+    const int x0 = 1, w = 122, top = 17, rowh = 15;
+    m_ink = INK_RED;
+    fill_rect(0, 0, 124, 15);
+    m_ink = INK_WHITE;
+    p = put_str(buf, "THÁNG ");
+    p = put_uint(p, c->month, 1);
+    p = put_str(p, " · ");
+    put_uint(p, c->year, 4);
+    text_top_center(&font_c10b, 62, 1, buf);
+
+    static const char* const heads[] = {"T2", "T3", "T4", "T5", "T6", "T7", "CN"};
+    for (int i = 0; i < 7; i++) {
+        m_ink = i == 6 ? INK_RED : INK_BLACK;
+        text_top_center(&font_c9b, x0 + (w * (2 * i + 1)) / 14, top, heads[i]);
     }
-    draw_status(mv, temp);
+    uint32_t first = days - (c->day - 1);
+    int col0 = ((first + 4) % 7 + 6) % 7;  // Monday-first column of the 1st
+    for (int d = 1; d <= days_in_month(c->year, c->month); d++) {
+        int cell = col0 + d - 1, col = cell % 7, row = cell / 7;
+        int cx = x0 + (w * (2 * col + 1)) / 14, cy = top + 12 + row * rowh;
+        put_uint(buf, d, 1);
+        if (d == c->day) {
+            m_ink = INK_BLACK;
+            fill_rect(cx - 7, cy - 1, 15, rowh - 2);
+            m_ink = INK_WHITE;
+            text_top_center(&font_c10b, cx, cy, buf);
+        } else {
+            m_ink = col == 6 ? INK_RED : INK_BLACK;
+            text_top_center(&font_c10, cx, cy, buf);
+        }
+    }
+    m_ink = INK_BLACK;
+}
+
+void gui_draw_clock(uint32_t ts, uint16_t mv, int8_t temp) {
+    char buf[40], *p;
+    civil_t c = to_civil(ts);
+    uint32_t days = ts / 86400;
+    clear();
+    draw_month(&c, days);
+
+    m_ink = INK_BLACK;
+    fill_rect(125, 3, 1, 116);
+    text_top_center(&font_c11b, 188, 3, weekdays_upper[c.wday]);
+    fmt_hm(buf, c.hour, c.min);
+    text_top_center(&font_c36, 188, 17, buf);
+
+    lunar_date_t l;
+    if (lunar_from_days(days, &l)) {
+        p = buf;
+        if (l.day <= 10) p = put_str(p, "Mùng ");
+        p = put_uint(p, l.day, 1);
+        if (l.leap) {
+            *p++ = '/';
+            p = put_uint(p, l.month, 1);
+            put_str(p, " nhuận");
+        } else {
+            p = put_str(p, " tháng ");
+            put_uint(p, l.month, 1);
+        }
+        m_ink = INK_RED;
+        text_top_center(&font_c12b, 188, 62, buf);
+        m_ink = INK_BLACK;
+        p = put_str(buf, "năm ");
+        p = put_str(p, lunar_can(l.year));
+        p = put_str(p, " ");
+        put_str(p, lunar_chi(l.year));
+        text_top_center(&font_c11, 188, 78, buf);
+    }
+
+    // Status: temperature, battery icon with percentage.
+    p = buf;
+    if (temp < 0) *p++ = '-';
+    p = put_uint(p, temp < 0 ? -temp : temp, 1);
+    put_str(p, "°C");
+    draw_text(&font_c9, 131, 105 + font_c9.ascent, buf, strlen(buf));
+    uint8_t pct = battery_percent(mv);
+    const int bx = 224, by = 106;
+    fill_rect(bx, by, 19, 1);
+    fill_rect(bx, by + 8, 19, 1);
+    fill_rect(bx, by, 1, 9);
+    fill_rect(bx + 18, by, 1, 9);
+    fill_rect(bx + 19, by + 2, 2, 5);
+    int fill = 15 * pct / 100;
+    if (pct > 0 && fill == 0) fill = 1;
+    fill_rect(bx + 2, by + 2, fill, 5);
+    p = put_uint(buf, pct, 1);
+    put_str(p, "%");
+    draw_text_right(&font_c9, bx - 3, by - 1 + font_c9.ascent, buf);
 }
 
 void gui_draw_date(uint32_t ts, uint16_t mv, int8_t temp) {

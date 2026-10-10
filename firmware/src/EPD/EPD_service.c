@@ -91,18 +91,31 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
     // Periodic ghost-clearing full refreshes take ~13 s, so navigation defers them while a
     // maneuver is close and takes them early on a long straight.
     uint8_t flags = scr == SCR_NAV && nav ? nav->flags : 0;
+    // The clock screen carries red, which only a full refresh can draw: full once an hour
+    // (on the hour, which also covers the date change at midnight), fast for the other minutes.
+    bool clock = scr == SCR_CLOCK;
     const char* why = force_full                        ? "forced"
                       : p_epd->settings.fast_refresh == 0 ? "fast-off"
                       : m_shown.screen != scr             ? "new-screen"
+                      : clock && ts % 3600 < 60           ? "hourly"
+                      : clock                             ? ""
                       : (flags & NAV_FLAG_CLEANUP) && m_shown.partials >= full_every / 2 ? "cleanup"
                       : m_shown.partials >= full_every && !(flags & NAV_FLAG_URGENT)       ? "periodic"
                       : m_shown.partials >= 60                                             ? "overdue"
                                                                                            : "";
     bool full = why[0] != 0;
+    gui_set_red_as_black(epd->color != COLOR_BWR);
     if (full) {
         render(scr, nav, ts, mv, temp);
         SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
-        SSD1680_FillPlane(epd, false, 0xFF);  // no red
+        if (clock && epd->color == COLOR_BWR) {
+            gui_set_red_pass(true);
+            render(scr, nav, ts, mv, temp);
+            gui_set_red_pass(false);
+            SSD1680_WritePlane(epd, false, gui_buffer(), GUI_BUF_SIZE);
+        } else {
+            SSD1680_FillPlane(epd, false, 0xFF);  // no red
+        }
         epd->drv->refresh(epd);
         m_shown.partials = 0;
     } else {
@@ -110,7 +123,7 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
         SSD1680_WritePlane(epd, false, gui_buffer(), GUI_BUF_SIZE);
         render(scr, nav, ts, mv, temp);
         SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
-        SSD1680_RefreshPartial(epd, p_epd->settings.fast_variant);
+        SSD1680_RefreshPartial(epd, p_epd->settings.fast_variant, clock);
         if (m_shown.partials < 255) m_shown.partials++;
     }
     m_shown.screen = scr;

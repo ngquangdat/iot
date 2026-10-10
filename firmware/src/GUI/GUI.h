@@ -63,7 +63,10 @@ uint8_t* gui_buffer(void);
 void gui_draw_nav(const nav_data_t* nav);
 // Width the one-line instruction needs above the sketch (0 if it fits without scrolling).
 int gui_nav_marquee_width(const nav_data_t* nav);
+// Clock + month calendar + lunar date (uses red). Draw once per RAM: black pass, then red pass.
 void gui_draw_clock(uint32_t local_ts, uint16_t mv, int8_t temp);
+void gui_set_red_pass(bool red);       // false: black/white RAM, true: red RAM
+void gui_set_red_as_black(bool on);    // B/W panels: show red ink as black
 void gui_draw_date(uint32_t local_ts, uint16_t mv, int8_t temp);
 
 #endif

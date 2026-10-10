@@ -1,5 +1,7 @@
 #include "EPD_driver.h"
 
+#include <string.h>
+
 // SSD1680 driver for the 2.13" 122x250 panel of the AESL0213C.
 //
 // RAM layout: 16 bytes (128 sources) per gate line, 250 gate lines. The host
@@ -140,9 +142,17 @@ static const uint8_t lut_fast_bw[159] = {
     0x22, 0x17, 0x41, 0x00, 0x32, 0x36,                    // EOPT, VGH, VSH1, VSH2, VSL, VCOM
 };
 
-static void SSD1680_LoadFastLut(void) {
+// keep_unchanged: don't drive pixels that keep their colour (LUT0 black->black,
+// LUT3 white->white), so red pixels from the last full refresh stay untouched.
+static void SSD1680_LoadFastLut(bool keep_unchanged) {
+    uint8_t lut[153];
+    memcpy(lut, lut_fast_bw, sizeof(lut));
+    if (keep_unchanged) {
+        memset(&lut[0], 0, 12);
+        memset(&lut[36], 0, 12);
+    }
     EPD_WriteCmd(SSD16xx_WRITE_LUT);
-    EPD_WriteData((uint8_t*)lut_fast_bw, 153);
+    EPD_WriteData(lut, 153);
     EPD_Write(0x3F, lut_fast_bw[153]);
     EPD_Write(SSD16xx_GDV_CTRL, lut_fast_bw[154]);
     EPD_Write(SSD16xx_SDV_CTRL, lut_fast_bw[155], lut_fast_bw[156], lut_fast_bw[157]);
@@ -154,11 +164,11 @@ static void SSD1680_LoadFastLut(void) {
 //   0: host LUT, Display Mode 2 in one update sequence
 //   1: host LUT, Waveshare 2.13 V3 sequence (analog on first, ping-pong option)
 //   2: the panel's own OTP Display Mode 2 waveform
-void SSD1680_RefreshPartial(epd_model_t* epd, uint8_t variant) {
+void SSD1680_RefreshPartial(epd_model_t* epd, uint8_t variant, bool keep_unchanged) {
     EPD_Write(SSD16xx_BORDER_CTRL, 0x80);
     EPD_Write(SSD16xx_DISP_CTRL1, 0x00, 0x00);  // both RAMs as-is
     if (variant == 1) {
-        SSD1680_LoadFastLut();
+        SSD1680_LoadFastLut(keep_unchanged);
         EPD_Write(SSD16xx_OTP_SELECTION_CTRL, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00);
         SSD16xx_Update(0xC0);
         SSD16xx_WaitBusy(1000);
@@ -166,7 +176,7 @@ void SSD1680_RefreshPartial(epd_model_t* epd, uint8_t variant) {
     } else if (variant == 2) {
         SSD16xx_Update(0xFF);
     } else {
-        SSD1680_LoadFastLut();
+        SSD1680_LoadFastLut(keep_unchanged);
         SSD16xx_Update(0xCF);
     }
     SSD16xx_WaitBusy(UINT16_MAX);

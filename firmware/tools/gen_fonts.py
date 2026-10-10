@@ -25,12 +25,24 @@ def vietnamese_letters():
 
 TEXT_CHARS = ASCII + vietnamese_letters() + "·…°"
 
+CAN_CHI = "Canh Tân Nhâm Quý Giáp Ất Bính Đinh Mậu Kỷ Thân Dậu Tuất Hợi Tý Sửu Dần Mão Thìn Tỵ Ngọ Mùi"
+WEEKDAYS_UPPER = "THỨ HAI BA TƯ NĂM SÁU BẢY CHỦ NHẬT"
+
 FONTS = [
     # name, ttf, pixel size, characters
     ("font_text", "DejaVuSans-Bold.ttf", 15, TEXT_CHARS),
-    ("font_small", "DejaVuSans.ttf", 12, TEXT_CHARS),
+    ("font_small", "DejaVuSans.ttf", 12, ASCII + "ò·°"),  # nav footer, status row
     ("font_big", "DejaVuSans-Bold.ttf", 28, "0123456789 .,:kmhNgay!"),
     ("font_huge", "DejaVuSans-Bold.ttf", 54, "0123456789:"),
+    # clock + calendar screen
+    ("font_c36", "DejaVuSans-Bold.ttf", 36, "0123456789:"),
+    ("font_c12b", "DejaVuSans-Bold.ttf", 12, "Mùng tháng nhuận0123456789/"),
+    ("font_c11b", "DejaVuSans-Bold.ttf", 11, WEEKDAYS_UPPER),
+    ("font_c11", "DejaVuSans.ttf", 11, "năm " + CAN_CHI),
+    ("font_c10b", "DejaVuSans-Bold.ttf", 10, "THÁNG ·0123456789"),
+    ("font_c10", "DejaVuSans.ttf", 10, "0123456789"),
+    ("font_c9b", "DejaVuSans-Bold.ttf", 9, "T2345678CN"),
+    ("font_c9", "DejaVuSans.ttf", 9, "0123456789°C%-"),
 ]
 
 

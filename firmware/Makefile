@@ -5,7 +5,7 @@ UP      := upstream
 SDK     := $(UP)/SDK/17.1.0_ddde560
 BUILD   := build
 TARGET  := aesl0213c
-APP_VER ?= 1007
+APP_VER ?= 1008
 
 CC      := arm-none-eabi-gcc
 OBJCOPY := arm-none-eabi-objcopy
@@ -13,7 +13,7 @@ SIZE    := arm-none-eabi-size
 
 SRC_APP := src/main.c \
   src/EPD/EPD_config.c src/EPD/EPD_driver.c src/EPD/EPD_service.c src/EPD/SSD16xx.c \
-  src/GUI/GUI.c src/GUI/font_data.c
+  src/GUI/GUI.c src/GUI/font_data.c src/GUI/lunar.c src/GUI/lunar_data.c
 
 SRC_SDK := $(addprefix $(SDK)/, \
   components/ble/ble_advertising/ble_advertising.c \

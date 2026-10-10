@@ -23,5 +23,7 @@ extern const font_t font_text;   // 15 px bold, Vietnamese
 extern const font_t font_small;  // 12 px, Vietnamese
 extern const font_t font_big;    // 28 px bold digits
 extern const font_t font_huge;   // 54 px bold digits
+// clock + calendar screen
+extern const font_t font_c36, font_c12b, font_c11b, font_c11, font_c10b, font_c10, font_c9b, font_c9;
 
 #endif
