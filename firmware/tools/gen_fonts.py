@@ -33,7 +33,6 @@ FONTS = [
     ("font_text", "DejaVuSans-Bold.ttf", 15, TEXT_CHARS),
     ("font_small", "DejaVuSans.ttf", 12, ASCII + "ò·°"),  # nav footer, status row
     ("font_big", "DejaVuSans-Bold.ttf", 28, "0123456789 .,:kmhNgay!"),
-    ("font_huge", "DejaVuSans-Bold.ttf", 54, "0123456789:"),
     # clock + calendar screen
     ("font_c36", "DejaVuSans-Bold.ttf", 36, "0123456789:"),
     ("font_c12b", "DejaVuSans-Bold.ttf", 12, "Mùng tháng nhuận0123456789/"),

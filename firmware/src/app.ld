@@ -5,7 +5,9 @@ GROUP(-lgcc -lc -lnosys)
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x19000, LENGTH = 0xE000  /* up to 0x27000: FDS pages + bootloader follow */
+  /* The tag's DFU bootloader rejects images over ~52 KB at init (it keeps 12 KB of app
+     data below itself), so cap the app at 0xD000: oversize builds fail to link. */
+  FLASH (rx) : ORIGIN = 0x19000, LENGTH = 0xD000
   RAM (rwx) :  ORIGIN = 0x200022d8, LENGTH = 0x3d28
 }
 

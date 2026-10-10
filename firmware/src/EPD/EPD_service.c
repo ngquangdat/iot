@@ -85,12 +85,31 @@ static void render(screen_t scr, const nav_data_t* nav, uint32_t ts, uint16_t mv
     }
 }
 
+// Tiny formatters: snprintf would pull ~2.5 KB of newlib into a flash budget the bootloader caps.
+static char* s_put(char* p, const char* s) {
+    while (*s) *p++ = *s++;
+    *p = 0;
+    return p;
+}
+
+static char* s_uint(char* p, uint32_t v) {
+    char tmp[10];
+    int n = 0;
+    do tmp[n++] = '0' + v % 10; while (v /= 10);
+    while (n) *p++ = tmp[--n];
+    *p = 0;
+    return p;
+}
+
 // Report each screen update to the phone ("upd=fast 480ms"), which makes refresh issues visible in the web log.
 static void report_update(ble_epd_t* p_epd, bool full, const char* why, uint32_t start_ticks) {
     uint32_t ticks = app_timer_cnt_diff_compute(app_timer_cnt_get(), start_ticks);
     uint32_t ms = ticks * 1000 / APP_TIMER_CLOCK_FREQ * (APP_TIMER_CONFIG_RTC_FREQUENCY + 1);
     char buf[40];
-    snprintf(buf, sizeof(buf), "upd=%s %lums %s", full ? "full" : "fast", (unsigned long)ms, why);
+    char* p = s_put(buf, full ? "upd=full " : "upd=fast ");
+    p = s_uint(p, ms);
+    p = s_put(p, "ms ");
+    s_put(p, why);
     NRF_LOG_INFO("%s", buf);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
 }
@@ -276,17 +295,20 @@ static void epd_update_display_mode(ble_epd_t* p_epd, display_mode_t mode) {
 }
 
 static void epd_send_time(ble_epd_t* p_epd) {
-    char buf[20] = {0};
-    snprintf(buf, 20, "t=%" PRIu32, timestamp());
+    char buf[16];
+    s_uint(s_put(buf, "t="), timestamp());
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
 }
 
 static void epd_send_mtu(ble_epd_t* p_epd) {
-    char buf[40] = {0};
-    snprintf(buf, sizeof(buf), "mtu=%d nav=2 rem=%d", p_epd->max_data_len, REMINDER_MAX);
+    char buf[40], *p;
+    p = s_uint(s_put(buf, "mtu="), p_epd->max_data_len);
+    s_uint(s_put(p, " nav=2 rem="), REMINDER_MAX);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
-    snprintf(buf, sizeof(buf), "cfg fast=%d every=%d off=%d var=%d", p_epd->settings.fast_refresh,
-             p_epd->settings.full_every, p_epd->settings.x_offset, p_epd->settings.fast_variant);
+    p = s_uint(s_put(buf, "cfg fast="), p_epd->settings.fast_refresh);
+    p = s_uint(s_put(p, " every="), p_epd->settings.full_every);
+    p = s_uint(s_put(p, " off="), p_epd->settings.x_offset);
+    s_uint(s_put(p, " var="), p_epd->settings.fast_variant);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
 }
 

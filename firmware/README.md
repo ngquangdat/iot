@@ -39,7 +39,10 @@ cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×
    **nRF Device Firmware Update** thay thế.
 4. Nếu app báo lỗi chữ ký/phiên bản (*signature*, *version*, *init packet*): bootloader của nhãn
    dùng khoá khác — nhãn **không bị thay đổi**, vẫn chạy firmware cũ.
-5. Sau khi nạp, mở web → kết nối → nhật ký phải có `mtu=… nav=1` và Firmware `v80`.
+5. Nếu app báo lỗi ở bước **Init** (*Insufficient resources*, *Remote DFU error*) mà nhãn vẫn chạy bình thường:
+   file firmware quá lớn so với chỗ trống bootloader của nhãn cho phép (~52 KB) — nhãn không bị thay đổi.
+   Bản từ 1011 trở đi đã được giới hạn kích thước khi build nên không còn gặp lỗi này.
+6. Sau khi nạp, mở web → kết nối → nhật ký phải có `mtu=… nav=2 rem=8` và Firmware `v91`.
 
 **Nếu màn không hiển thị** nhưng vẫn kết nối được: gửi lệnh đặt chân trong tab *Nâng cao → Gửi lệnh thô*
 `00 mosi sclk cs dc rst busy bs` (6 byte đầu của dòng *Chân (pin)* đã chép, rồi byte thứ 7), sau đó `91` để khởi động lại.
@@ -50,11 +53,14 @@ cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×
 make                         # cần arm-none-eabi-gcc
 make ota                     # cần nrfutil 6.x: pip install --ignore-requires-python nrfutil==6.1.7
 ```
-- Flash ứng dụng: `0x19000`–`0x27000` (sau đó là 2 trang FDS và bootloader ở `0x29000`), hiện dùng ~47,5 KB.
-- Gói OTA ký bằng khoá công khai của EPD-nRF5 (`upstream/tools/priv.pem`), `sd-req 0x126`, app version 1000.
+- Flash ứng dụng bắt đầu ở `0x19000`, bootloader ở `0x29000`, dữ liệu FDS ở `0x27000`. Bootloader
+  của nhãn chỉ nhận ảnh tối đa ~52 KB (bản 1009/1010 dài 53,4 KB bị từ chối ở bước Init), nên
+  `src/app.ld` giới hạn ứng dụng ở `0xD000` (53.248 byte): build vượt cỡ sẽ báo lỗi khi link.
+  Hiện dùng ~48 KB (không dùng `snprintf` để tiết kiệm ~2,5 KB).
+- Gói OTA ký bằng khoá công khai của EPD-nRF5 (`upstream/tools/priv.pem`), `sd-req 0x126`, app version 1011.
 - `tools/gen_fonts.py` sinh `src/GUI/font_data.c` từ DejaVu Sans (giấy phép Bitstream Vera).
 - `tools/gui_preview.c` vẽ thử các màn trên máy tính:
-  `cc -Isrc/GUI tools/gui_preview.c src/GUI/GUI.c src/GUI/font_data.c -o build/gui_preview`.
+  `cc -Isrc/GUI tools/gui_preview.c src/GUI/GUI.c src/GUI/font_data.c src/GUI/lunar.c src/GUI/lunar_data.c -o build/gui_preview && ./build/gui_preview`.
 
 ## Giao thức chỉ đường
 | Lệnh | Nội dung |

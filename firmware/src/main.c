@@ -309,7 +309,15 @@ static void gap_params_init(void) {
     NRF_LOG_INFO("Bluetooth MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\n", addr.addr[5], addr.addr[4], addr.addr[3],
                  addr.addr[2], addr.addr[1], addr.addr[0]);
 
-    snprintf(device_name, 20, "%s_%02X%02X", DEVICE_NAME, addr.addr[1], addr.addr[0]);
+    static const char hex[] = "0123456789ABCDEF";
+    size_t n = strlen(DEVICE_NAME);
+    memcpy(device_name, DEVICE_NAME, n);
+    device_name[n++] = '_';
+    device_name[n++] = hex[addr.addr[1] >> 4];
+    device_name[n++] = hex[addr.addr[1] & 15];
+    device_name[n++] = hex[addr.addr[0] >> 4];
+    device_name[n++] = hex[addr.addr[0] & 15];
+    device_name[n] = 0;
     APP_ERROR_CHECK(sd_ble_gap_device_name_set(&sec_mode, (const uint8_t*)device_name, strlen(device_name)));
 
     memset(&gap_conn_params, 0, sizeof(gap_conn_params));

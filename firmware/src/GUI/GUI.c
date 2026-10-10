@@ -692,7 +692,7 @@ void gui_draw_date(uint32_t ts, uint16_t mv, int8_t temp) {
     civil_t c = to_civil(ts);
     clear();
     put_uint(buf, c.day, 2);
-    draw_text_center(&font_huge, 64, 78, buf);
+    draw_text_center(&font_c36, 64, 70, buf);
     fill_rect(126, 16, 2, 80);
     draw_text(&font_text, 140, 40, weekdays[c.wday], strlen(weekdays[c.wday]));
     char* p = put_str(buf, "Th\xC3\xA1ng ");  // "Tháng "
