@@ -42,7 +42,7 @@ void ble_epd_evt_handler(ble_evt_t const* p_ble_evt, void* p_context);
 #define BLE_EPD_DEF(_name) static ble_epd_t _name;
 #endif
 
-#define APP_VERSION 0x58
+#define APP_VERSION 0x59
 
 #define BLE_UUID_EPD_SVC_BASE \
     {{0XEC, 0X5A, 0X67, 0X1C, 0XC1, 0XB6, 0X46, 0XFB, 0X8D, 0X91, 0X28, 0XD8, 0X22, 0X36, 0X75, 0X62}}
@@ -77,6 +77,9 @@ enum EPD_CMDS {
     EPD_CMD_NAV = 0x40,      /** < show a navigation instruction (see GUI.h nav_data_t) */
     EPD_CMD_NAV_CTRL = 0x41, /** < 00: stop navigation, 01 xx: fast refresh on/off, 02 xx: full refresh interval */
     EPD_CMD_NAV_SHAPE = 0x42, /** < junction sketch for the following NAV packets */
+
+    EPD_CMD_REMINDER_SET = 0x50,  /** < 50 idx t(u32 LE, local) repeat text...; t = 0 deletes the slot */
+    EPD_CMD_REMINDER_CTRL = 0x51, /** < 00: dismiss the alert, 01: delete all, 02 idx: report slot (as 52 ...) */
 
     EPD_CMD_SET_CONFIG = 0x90, /**< set full EPD config */
     EPD_CMD_SYS_RESET = 0x91,  /**< MCU reset */

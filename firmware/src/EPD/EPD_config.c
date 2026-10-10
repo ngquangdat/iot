@@ -11,12 +11,14 @@
 #define CONFIG_REC_KEY 0x0001
 
 #define SETTINGS_REC_KEY 0x0002
+#define REMINDERS_REC_KEY 0x0003
 
-// A write that failed for lack of space is retried once garbage collection finishes.
+// A write that failed for lack of space is retried once garbage collection finishes
+// (one slot per record key 1..3).
 static struct {
     const void* data;
     uint16_t size;
-} m_pending[2];
+} m_pending[3];
 
 static void record_write(uint16_t key, const void* data, uint16_t size);
 
@@ -28,11 +30,11 @@ static void run_fds_gc(void* p_event_data, uint16_t event_size) {
 static void fds_evt_handler(fds_evt_t const* const p_fds_evt) {
     NRF_LOG_DEBUG("fds evt: id=%d result=%d\n", p_fds_evt->id, p_fds_evt->result);
     if (p_fds_evt->id == FDS_EVT_GC && p_fds_evt->result == NRF_SUCCESS) {
-        for (uint8_t i = 0; i < 2; i++) {
+        for (uint8_t i = 0; i < 3; i++) {
             if (m_pending[i].data == NULL) continue;
             const void* data = m_pending[i].data;
             m_pending[i].data = NULL;
-            record_write(i == 0 ? CONFIG_REC_KEY : SETTINGS_REC_KEY, data, m_pending[i].size);
+            record_write(i + 1, data, m_pending[i].size);
         }
     }
 }
@@ -102,7 +104,7 @@ static void record_write(uint16_t key, const void* data, uint16_t size) {
 
     if (ret == FDS_ERR_NO_SPACE_IN_FLASH) {
         NRF_LOG_ERROR("record write: no space, retry after gc\n");
-        uint8_t slot = key == CONFIG_REC_KEY ? 0 : 1;
+        uint8_t slot = key - 1;
         m_pending[slot].data = data;
         m_pending[slot].size = size;
         app_sched_event_put(NULL, 0, run_fds_gc);
@@ -133,6 +135,16 @@ void epd_settings_read(epd_settings_t* st) {
 }
 
 void epd_settings_write(epd_settings_t* st) { record_write(SETTINGS_REC_KEY, st, sizeof(epd_settings_t)); }
+
+void epd_reminders_read(epd_reminders_t* rem) {
+    record_read(REMINDERS_REC_KEY, rem, sizeof(epd_reminders_t));
+    for (uint8_t i = 0; i < REMINDER_MAX; i++) {
+        reminder_t* r = &rem->r[i];
+        if (r->time == 0xFFFFFFFF || r->len > REMINDER_TEXT_MAX || (r->repeat & 7) > REPEAT_MONTHLY) memset(r, 0, sizeof(*r));
+    }
+}
+
+void epd_reminders_write(epd_reminders_t* rem) { record_write(REMINDERS_REC_KEY, rem, sizeof(epd_reminders_t)); }
 
 void epd_config_clear(epd_config_t* cfg) {
     ret_code_t ret;

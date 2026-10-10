@@ -47,6 +47,15 @@ static void dump_color(const char* path, void (*draw)(uint32_t, uint16_t, int8_t
     fclose(f);
 }
 
+static void alert_a(uint32_t ts, uint16_t mv, int8_t t) {
+    const char* s = "Họp giao ban với phòng Phân tích, mang báo cáo quý III";
+    gui_draw_alert(ts, s, strlen(s), 0);
+}
+static void alert_b(uint32_t ts, uint16_t mv, int8_t t) {
+    const char* s = "Uống thuốc";
+    gui_draw_alert(ts, s, strlen(s), 2);
+}
+
 static uint16_t nav_scroll;
 
 static void nav(const char* path, uint8_t icon, uint16_t dist, const char* text, uint8_t flags) {
@@ -89,6 +98,8 @@ int main(void) {
     dump_color("build/clock_d.ppm", gui_draw_clock, 1788152400 + 7 * 3600, 2400, 33);
     gui_draw_clock(1790000000 + 7 * 3600, 2950, 27);
     dump("build/clock.pbm");
+    dump_color("build/alert_a.ppm", alert_a, 1791641580 + 7 * 3600, 0, 0);
+    dump_color("build/alert_b.ppm", alert_b, 1791641580 + 7 * 3600, 0, 0);
     gui_draw_date(1790000000 + 7 * 3600, 2950, 27);
     dump("build/date.pbm");
     gui_draw_clock(1790000000 + 7 * 3600, 2600, 24);

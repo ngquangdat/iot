@@ -38,6 +38,24 @@ typedef struct {
 void epd_settings_read(epd_settings_t* s);  // loads and sanitizes, falling back to defaults
 void epd_settings_write(epd_settings_t* s);
 
+// Reminders: shown on the tag at their time, kept in flash.
+#define REMINDER_MAX 8
+#define REMINDER_TEXT_MAX 58
+enum { REPEAT_ONCE = 0, REPEAT_DAILY, REPEAT_WEEKLY, REPEAT_MONTHLY };
+typedef struct {
+    uint32_t time;  // local time (seconds since 1970); 0 = empty slot
+    uint8_t repeat;  // bits 0-2: REPEAT_*, bits 3-7: day of month a monthly reminder is anchored to
+    uint8_t len;
+    char text[REMINDER_TEXT_MAX];  // UTF-8
+} reminder_t;                      // 64 bytes
+
+typedef struct {
+    reminder_t r[REMINDER_MAX];
+} epd_reminders_t;
+
+void epd_reminders_read(epd_reminders_t* rem);
+void epd_reminders_write(epd_reminders_t* rem);
+
 #define EPD_CONFIG_SIZE (sizeof(epd_config_t) / sizeof(uint8_t))
 
 void epd_config_init(epd_config_t* cfg);

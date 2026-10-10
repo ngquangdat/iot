@@ -222,6 +222,17 @@ void EPD_LED_Toggle(void) {
     if (EPD_LED_PIN != 0xFF) nrf_gpio_pin_toggle(EPD_LED_PIN);
 }
 
+void EPD_LED_Set(bool on) {
+    if (EPD_LED_PIN == 0xFF) return;
+    if (on) {
+        pinMode(EPD_LED_PIN, OUTPUT);
+        digitalWrite(EPD_LED_PIN, LOW);
+    } else {
+        digitalWrite(EPD_LED_PIN, HIGH);
+        pinMode(EPD_LED_PIN, DEFAULT);
+    }
+}
+
 void EPD_LED_BLINK(void) {
     if (EPD_LED_PIN != 0xFF) {
         pinMode(EPD_LED_PIN, OUTPUT);

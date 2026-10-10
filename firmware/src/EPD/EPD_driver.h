@@ -203,6 +203,7 @@ void EPD_LED_ON(void);
 void EPD_LED_OFF(void);
 void EPD_LED_Toggle(void);
 void EPD_LED_BLINK(void);
+void EPD_LED_Set(bool on);  // standalone use (reminder alerts), configures the pin itself
 
 // VDD voltage
 uint16_t EPD_ReadVoltage(void);

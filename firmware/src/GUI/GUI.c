@@ -669,3 +669,33 @@ void gui_draw_date(uint32_t ts, uint16_t mv, int8_t temp) {
     draw_text(&font_text, 140, 88, buf, 4);
     draw_status(mv, temp);
 }
+
+void gui_draw_alert(uint32_t ts, const char* text, uint8_t len, uint8_t more) {
+    char buf[32], *p;
+    civil_t c = to_civil(ts);
+    clear();
+    m_ink = INK_RED;
+    fill_rect(0, 0, GUI_W, 24);
+    m_ink = INK_WHITE;
+    p = put_str(buf, "NHẮC VIỆC · ");
+    fmt_hm(p, c.hour, c.min);
+    draw_text_center(&font_text, GUI_W / 2, 18, buf);
+    m_ink = INK_BLACK;
+    draw_wrapped(&font_text, 8, 46, 19, GUI_W - 16, 4, text, len);
+    static const char* const wd[] = {"CN", "T2", "T3", "T4", "T5", "T6", "T7"};
+    p = put_str(buf, wd[c.wday]);
+    *p++ = ' ';
+    p = put_uint(p, c.day, 2);
+    *p++ = '/';
+    p = put_uint(p, c.month, 2);
+    *p++ = '/';
+    put_uint(p, c.year, 4);
+    draw_text(&font_small, 8, 119, buf, strlen(buf));
+    if (more) {
+        m_ink = INK_RED;
+        p = put_str(buf, "+");
+        put_uint(p, more, 1);
+        draw_text_right(&font_text, GUI_W - 8, 120, buf);
+        m_ink = INK_BLACK;
+    }
+}

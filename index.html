@@ -191,6 +191,13 @@ progress[hidden] { display: none; }
 #log .err { color: var(--red); }
 #log .rx { color: var(--blue); }
 
+/* Reminder list */
+.rem-row { align-items: flex-start; }
+.rem-row .grow b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.rem-row .grow small { display: block; font-size: 14px; color: var(--label-2); margin-top: 2px; }
+.rem-row .del { color: var(--red); background: none; border: 0; padding: 4px 0 4px 8px; cursor: pointer; font-size: 15px; }
+.row input[type="datetime-local"] { border: 0; background: transparent; outline: none; text-align: right; color: var(--blue); min-width: 0; }
+
 /* Tab bar */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
@@ -219,6 +226,7 @@ progress[hidden] { display: none; }
   <symbol id="i-nav" viewBox="0 0 24 24"><path fill="currentColor" d="M20.6 3.4a1 1 0 0 0-1.1-.2l-16 7a1 1 0 0 0 .1 1.9l6.6 1.7 1.7 6.6a1 1 0 0 0 1.9.1l7-16a1 1 0 0 0-.2-1.1Z"/></symbol>
   <symbol id="i-screen" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 20.5h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6.5 13.5 9.5 10l2.5 2.5L14 11l3.5 2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><path fill="currentColor" d="M13.9 2.6a1 1 0 0 0-1-.8h-1.8a1 1 0 0 0-1 .8l-.3 1.9a7.7 7.7 0 0 0-1.6.9l-1.8-.7a1 1 0 0 0-1.2.4l-.9 1.6a1 1 0 0 0 .2 1.3l1.5 1.2a7.8 7.8 0 0 0 0 1.8l-1.5 1.2a1 1 0 0 0-.2 1.3l.9 1.6a1 1 0 0 0 1.2.4l1.8-.7c.5.4 1 .7 1.6.9l.3 1.9a1 1 0 0 0 1 .8h1.8a1 1 0 0 0 1-.8l.3-1.9a7.7 7.7 0 0 0 1.6-.9l1.8.7a1 1 0 0 0 1.2-.4l.9-1.6a1 1 0 0 0-.2-1.3l-1.5-1.2a7.8 7.8 0 0 0 0-1.8l1.5-1.2a1 1 0 0 0 .2-1.3l-.9-1.6a1 1 0 0 0-1.2-.4l-1.8.7a7.7 7.7 0 0 0-1.6-.9l-.3-1.9ZM12 15.3a3.3 3.3 0 1 1 0-6.6 3.3 3.3 0 0 1 0 6.6Z"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5a1.5 1.5 0 0 0-1.5 1.5v.6A6.5 6.5 0 0 0 5.5 11v4.2l-1.6 2.1A1 1 0 0 0 4.7 19h14.6a1 1 0 0 0 .8-1.7l-1.6-2.1V11a6.5 6.5 0 0 0-5-6.4V4A1.5 1.5 0 0 0 12 2.5ZM9.5 20a2.5 2.5 0 0 0 5 0h-5Z"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5.2l3.4 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
@@ -300,6 +308,31 @@ progress[hidden] { display: none; }
     </div>
     <button id="btnSendImg" class="btn" type="button" disabled>Gửi lên nhãn</button>
     <input id="imgFile" type="file" accept="image/*" hidden>
+  </section>
+
+  <!-- ===== Nhắc việc ===== -->
+  <section class="view" data-view="remind" hidden>
+    <div id="remNeedFw" class="banner" hidden>Cần firmware <b>v89</b> trở lên. Tải trong Cài đặt → Firmware rồi nạp lại.</div>
+    <div class="group-title">Thêm nhắc</div>
+    <div class="group">
+      <label class="row"><input id="remText" class="grow" type="text" placeholder="Nội dung nhắc" maxlength="58" autocomplete="off"></label>
+      <label class="row"><span class="grow" style="white-space:nowrap">Thời gian</span><input id="remTime" type="datetime-local"></label>
+      <div class="row">
+        <div class="seg" id="remRepeat" role="group" aria-label="Lặp lại">
+          <button type="button" data-v="0">Một lần</button>
+          <button type="button" data-v="1">Hằng ngày</button>
+          <button type="button" data-v="2">Hằng tuần</button>
+          <button type="button" data-v="3">Hằng tháng</button>
+        </div>
+      </div>
+    </div>
+    <p id="remFoot" class="foot">Đến giờ nhãn hiện nội dung và nháy đèn, kể cả khi điện thoại không kết nối.</p>
+    <button id="btnRemAdd" class="btn" type="button">Thêm nhắc</button>
+
+    <div class="group-title" id="remListTitle" style="margin-top:24px">Đã cài</div>
+    <div class="group" id="remList"><div class="row"><span class="grow value" style="text-align:left">Kết nối nhãn để xem danh sách.</span></div></div>
+    <p class="foot"></p>
+    <button id="btnRemDismiss" class="btn tinted" type="button">Tắt nhắc đang hiện trên nhãn</button>
   </section>
 
   <!-- ===== Cài đặt ===== -->
@@ -422,6 +455,7 @@ progress[hidden] { display: none; }
 <nav class="tabbar" role="tablist">
   <button type="button" role="tab" data-tab="nav" aria-selected="true"><svg><use href="#i-nav"/></svg>Chỉ đường</button>
   <button type="button" role="tab" data-tab="screen" aria-selected="false"><svg><use href="#i-screen"/></svg>Màn hình</button>
+  <button type="button" role="tab" data-tab="remind" aria-selected="false"><svg><use href="#i-bell"/></svg>Nhắc việc</button>
   <button type="button" role="tab" data-tab="settings" aria-selected="false"><svg><use href="#i-gear"/></svg>Cài đặt</button>
 </nav>
 <script>
@@ -513,6 +547,7 @@ function send(bytes, quiet) {
 function onNotify(ev) {
   const v = ev.target.value;
   const d = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  if (d[0] === 0x52 && d.length >= 7) { onReminderSlot(d); return; }
   const text = new TextDecoder().decode(d);
 
   if (text.startsWith('mtu=')) {
@@ -521,6 +556,9 @@ function onNotify(ev) {
     const navLevel = Number((text.match(/\bnav=(\d+)/) || [])[1] || 0);
     state.navFw = navLevel >= 1;
     state.navSketch = navLevel >= 2;
+    state.remSlots = Number((text.match(/\brem=(\d+)/) || [])[1] || 0);
+    refreshReminderUI();
+    if (state.remSlots) setTimeout(() => loadReminders(), 300);
     log('← ' + text.trim(), 'rx');
     refreshInfo();
     return;
@@ -597,9 +635,10 @@ async function connect() {
 
 function resetConn() {
   state.ch = null;
-  state.fw = 0; state.modelId = null; state.mode = null; state.chunk = 128; state.navFw = false; state.navSketch = false;
+  state.fw = 0; state.modelId = null; state.mode = null; state.chunk = 128; state.navFw = false; state.navSketch = false; state.remSlots = 0;
   setConn('Kết nối');
   refreshInfo();
+  if (typeof refreshReminderUI === 'function') refreshReminderUI();
 }
 function onDisconnected() {
   log('Đã ngắt kết nối.');
@@ -1581,7 +1620,135 @@ async function sendImage() {
 /* ================================================================
  * Wiring
  * ================================================================ */
-const TITLES = { nav: 'Chỉ đường', screen: 'Màn hình', settings: 'Cài đặt' };
+const TITLES = { nav: 'Chỉ đường', screen: 'Màn hình', remind: 'Nhắc việc', settings: 'Cài đặt' };
+
+/* ================================================================
+ * Reminders (stored on the tag: 50 set, 51 control, 52 slot report)
+ * ================================================================ */
+const REPEAT_NAMES = ['Một lần', 'Hằng ngày', 'Hằng tuần', 'Hằng tháng'];
+const WEEKDAYS = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+let reminders = [];            // [{ idx, time, repeat, text }] — time in the tag's local seconds
+let slotWaiter = null;
+
+// The tag keeps local time as "seconds since 1970" of the wall clock, without a zone.
+const toTagTime = date => Math.floor(date.getTime() / 1000) - date.getTimezoneOffset() * 60;
+const fromTagTime = t => new Date(t * 1000);  // read with getUTC*
+
+function onReminderSlot(d) {
+  const time = d[2] | (d[3] << 8) | (d[4] << 16) | (d[5] * 2 ** 24);
+  const slot = { idx: d[1], time, repeat: d[6] & 7, text: new TextDecoder().decode(d.subarray(7)) };
+  if (slotWaiter && slotWaiter.idx === slot.idx) { clearTimeout(slotWaiter.timer); slotWaiter.resolve(slot); slotWaiter = null; }
+}
+
+function readSlot(idx) {
+  return new Promise(resolve => {
+    slotWaiter = { idx, resolve, timer: setTimeout(() => { slotWaiter = null; resolve(null); }, 1500) };
+    send([0x51, 0x02, idx], true).catch(() => resolve(null));
+  });
+}
+
+async function loadReminders() {
+  if (!state.ch || !state.remSlots) return;
+  const list = [];
+  for (let i = 0; i < state.remSlots; i++) {
+    const s = await readSlot(i);
+    if (s && s.time) list.push(s);
+  }
+  reminders = list.sort((a, b) => a.time - b.time);
+  renderReminders();
+}
+
+function fmtTagTime(t) {
+  const d = fromTagTime(t);
+  const p = n => String(n).padStart(2, '0');
+  return `${WEEKDAYS[d.getUTCDay()]}, ${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} · ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+function renderReminders() {
+  const box = $('remList');
+  box.textContent = '';
+  $('remListTitle').textContent = state.remSlots ? `Đã cài (${reminders.length}/${state.remSlots})` : 'Đã cài';
+  if (!reminders.length) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<span class="grow value" style="text-align:left"></span>';
+    row.firstChild.textContent = state.ch ? 'Chưa có nhắc nào.' : 'Kết nối nhãn để xem danh sách.';
+    box.appendChild(row);
+    return;
+  }
+  for (const r of reminders) {
+    const row = document.createElement('div');
+    row.className = 'row rem-row';
+    const info = document.createElement('div');
+    info.className = 'grow';
+    const b = document.createElement('b'); b.textContent = r.text || '(không có nội dung)';
+    const sm = document.createElement('small'); sm.textContent = `${fmtTagTime(r.time)} · ${REPEAT_NAMES[r.repeat] || ''}`;
+    info.append(b, sm);
+    const del = document.createElement('button');
+    del.className = 'del'; del.type = 'button'; del.textContent = 'Xóa';
+    del.onclick = () => deleteReminder(r.idx);
+    row.append(info, del);
+    box.appendChild(row);
+  }
+}
+
+function refreshReminderUI() {
+  $('remNeedFw').hidden = !(state.ch && !state.remSlots);
+  $('btnRemAdd').disabled = !!state.ch && !state.remSlots;
+  if (!state.ch) { reminders = []; renderReminders(); }
+}
+
+async function addReminder() {
+  if (!state.ch) { toggleConnection(); return; }
+  const text = $('remText').value.trim();
+  const when = $('remTime').value ? new Date($('remTime').value) : null;
+  if (!text) { foot('remFoot', 'Nhập nội dung nhắc.', true); $('remText').focus(); return; }
+  if (!when || isNaN(when)) { foot('remFoot', 'Chọn ngày giờ nhắc.', true); return; }
+  const repeat = Number(segGet('remRepeat') || 0);
+  if (repeat === 0 && when.getTime() <= Date.now()) { foot('remFoot', 'Thời gian đã qua — chọn thời điểm trong tương lai.', true); return; }
+  await loadReminders();
+  const used = new Set(reminders.map(r => r.idx));
+  let idx = 0;
+  while (used.has(idx)) idx++;
+  if (idx >= state.remSlots) { foot('remFoot', `Đã đủ ${state.remSlots} nhắc — xóa bớt rồi thêm lại.`, true); return; }
+  const t = toTagTime(when);
+  const bytes = new TextEncoder().encode(text.normalize('NFC'));
+  let n = Math.min(bytes.length, 58);
+  while (n > 0 && n < bytes.length && (bytes[n] & 0xc0) === 0x80) n--;
+  const pkt = new Uint8Array(7 + n);
+  pkt.set([0x50, idx, t & 0xff, (t >>> 8) & 0xff, (t >>> 16) & 0xff, (t >>> 24) & 0xff, repeat]);
+  pkt.set(bytes.subarray(0, n), 7);
+  try {
+    await send(pkt);
+    $('remText').value = '';
+    foot('remFoot', 'Đã lưu vào nhãn.');
+    await loadReminders();
+  } catch (e) {
+    foot('remFoot', 'Lỗi: ' + e.message, true);
+  }
+}
+
+async function deleteReminder(idx) {
+  try {
+    await send([0x50, idx, 0, 0, 0, 0, 0]);
+    await loadReminders();
+  } catch (e) {
+    foot('remFoot', 'Lỗi: ' + e.message, true);
+  }
+}
+
+function initReminders() {
+  segSet('remRepeat', '0');
+  segBind('remRepeat', () => {});
+  // Default: next full hour.
+  const d = new Date(Date.now() + 3600e3);
+  d.setMinutes(0, 0, 0);
+  const p = n => String(n).padStart(2, '0');
+  $('remTime').value = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  $('btnRemAdd').onclick = addReminder;
+  $('btnRemDismiss').onclick = () => state.ch ? send([0x51, 0x00]).then(() => foot('remFoot', 'Đã tắt nhắc trên nhãn.')).catch(e => foot('remFoot', e.message, true)) : toggleConnection();
+  renderReminders();
+}
 function showTab(name) {
   document.querySelectorAll('.tabbar button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
   document.querySelectorAll('.view').forEach(v => { v.hidden = v.dataset.view !== name; });
@@ -1658,6 +1825,7 @@ function init() {
   segBind('fwVariant', v => fwSend([CMD.NAV_CTRL, 0x04, Number(v)]));
   $('btnClearLog').onclick = () => { $('log').textContent = ''; };
 
+  initReminders();
   refreshInfo();
   log('Sẵn sàng.');
 }

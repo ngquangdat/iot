@@ -16,6 +16,9 @@ cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×
   các phút khác refresh nhanh đen trắng không chạm vào điểm ảnh đứng yên nên màu đỏ được giữ nguyên.
   Âm lịch tra bảng 2024–2063 (`tools/gen_lunar.py`, thuật toán Hồ Ngọc Đức, UTC+7).
 - Màn **Lịch**: ngày lớn, thứ, tháng, năm.
+- **Nhắc việc**: tối đa 8 nhắc lưu trong flash (một lần / hằng ngày / hằng tuần / hằng tháng, giữ đúng ngày trong tháng).
+  Đến giờ nhãn hiện màn nhắc (dải đỏ + giờ, nội dung, "+N" nếu còn nhắc khác) và nháy LED 20 giây; tắt từ web hoặc tự
+  về đồng hồ sau 60 phút. Đang chỉ đường thì nhắc chờ tới khi kết thúc.
 - Giữ tương thích với web hiện tại: model 2, gói cấu hình báo panel `0x21`, lệnh ghi ảnh `0x30`
   cùng cách đặt cờ (`0x0f` lớp đen, `0xf0` gói tiếp theo), đồng bộ giờ `0x20`, lịch/đồng hồ.
 - Vẫn có **nạp qua Bluetooth không cần nút** (Secure DFU) để cập nhật lần sau.
@@ -57,6 +60,8 @@ make ota                     # cần nrfutil 6.x: pip install --ignore-requires-
 |---|---|
 | `40 ff ii dd dd rr rr hh mm text…` | cờ (`01` ép refresh toàn màn, `02` đã đến, `04` sắp rẽ – hoãn refresh toàn màn định kỳ, `08` đường thẳng dài – nên dọn bóng mờ ngay), icon, khoảng cách (m, LE), còn lại (×10 m, LE), giờ:phút đến, chữ UTF-8 ≤160 byte |
 | `42 jx jy mpp w n x y …` | sơ đồ ngã rẽ cho các gói `40` có cờ `10`: tâm ngã rẽ, mét/điểm ảnh ×10, rồi các đường (độ dày, số điểm, toạ độ trong khung 138×78 dưới dòng chữ); đường cuối là tuyến đi, có mũi tên |
+| `50 ii tttttttt rr text…` | nhắc việc ô `ii` (0–7): thời điểm giờ địa phương (giây, LE), lặp `rr` (0 một lần, 1 ngày, 2 tuần, 3 tháng); `t = 0` xoá ô |
+| `51 00` / `51 01` / `51 02 ii` | tắt nhắc đang hiện / xoá hết / đọc ô `ii` (trả về `52 ii tttttttt rr text…`) |
 | `41 00` | dừng chỉ đường, quay lại đồng hồ/lịch |
 | `41 01 xx` | refresh nhanh bật (`01`) / tắt (`00`) |
 | `41 02 nn` | refresh toàn màn sau `nn` lần refresh nhanh |

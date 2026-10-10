@@ -33,7 +33,7 @@
 // #define EPD_CFG_DEFAULT {0x05, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x01, 0x07}
 #endif
 
-typedef enum { SCR_NONE = 0, SCR_NAV, SCR_CLOCK, SCR_DATE } screen_t;
+typedef enum { SCR_NONE = 0, SCR_NAV, SCR_CLOCK, SCR_DATE, SCR_ALERT } screen_t;
 
 // What our last render left on the panel; partial refreshes re-render it as the "old" frame.
 static struct {
@@ -57,11 +57,25 @@ static volatile uint16_t m_marquee_px, m_marquee_total;
 static volatile uint8_t m_marquee_passes, m_marquee_wait;
 static volatile bool m_nav_active, m_nav_force, m_nav_sched;
 
+/* ---------- reminders ---------- */
+#define ALERT_SHOW_SECS 3600  // the alert gives way to the clock after an hour if not dismissed
+#define ALERT_LED_SECS 20     // LED blinks this long when an alert appears
+static epd_reminders_t m_rem;
+static reminder_t m_alert;  // the reminder on screen
+static uint8_t m_alert_more;
+static volatile bool m_alert_active;
+static uint32_t m_alert_until;
+static volatile uint8_t m_led_secs;
+
+static void epd_reminder_command(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length);
+
 static void render(screen_t scr, const nav_data_t* nav, uint32_t ts, uint16_t mv, int8_t temp) {
     if (scr == SCR_NAV)
         gui_draw_nav(nav);
     else if (scr == SCR_DATE)
         gui_draw_date(ts, mv, temp);
+    else if (scr == SCR_ALERT)
+        gui_draw_alert(m_alert.time, m_alert.text, m_alert.len, m_alert_more);
     else
         gui_draw_clock(ts, mv, temp);
 }
@@ -108,7 +122,7 @@ static void screen_update(ble_epd_t* p_epd, screen_t scr, const nav_data_t* nav,
     if (full) {
         render(scr, nav, ts, mv, temp);
         SSD1680_WritePlane(epd, true, gui_buffer(), GUI_BUF_SIZE);
-        if (clock && epd->color == COLOR_BWR) {
+        if ((clock || scr == SCR_ALERT) && epd->color == COLOR_BWR) {
             gui_set_red_pass(true);
             render(scr, nav, ts, mv, temp);
             gui_set_red_pass(false);
@@ -144,6 +158,10 @@ static void epd_gui_update(void* p_event_data, uint16_t event_size) {
     ble_epd_t* p_epd = event->p_epd;
 
     if (m_nav_active) return;  // navigation owns the screen
+    if (m_alert_active) {
+        if (event->force || m_shown.screen != SCR_ALERT) screen_update(p_epd, SCR_ALERT, NULL, m_alert.time, true);
+        return;
+    }
     if (p_epd->config.display_mode == MODE_PICTURE) return;
     screen_update(p_epd, p_epd->config.display_mode == MODE_CLOCK ? SCR_CLOCK : SCR_DATE, NULL, event->timestamp,
                   event->force);
@@ -260,7 +278,7 @@ static void epd_send_time(ble_epd_t* p_epd) {
 
 static void epd_send_mtu(ble_epd_t* p_epd) {
     char buf[40] = {0};
-    snprintf(buf, sizeof(buf), "mtu=%d nav=2", p_epd->max_data_len);
+    snprintf(buf, sizeof(buf), "mtu=%d nav=2 rem=%d", p_epd->max_data_len, REMINDER_MAX);
     ble_epd_string_send(p_epd, (uint8_t*)buf, strlen(buf));
     snprintf(buf, sizeof(buf), "cfg fast=%d every=%d off=%d var=%d", p_epd->settings.fast_refresh,
              p_epd->settings.full_every, p_epd->settings.x_offset, p_epd->settings.fast_variant);
@@ -363,6 +381,11 @@ static void epd_service_on_write(ble_epd_t* p_epd, uint8_t* p_data, uint16_t len
 
         case EPD_CMD_NAV:
             epd_nav_receive(p_epd, p_data, length);
+            break;
+
+        case EPD_CMD_REMINDER_SET:
+        case EPD_CMD_REMINDER_CTRL:
+            epd_reminder_command(p_epd, p_data, length);
             break;
 
         case EPD_CMD_NAV_SHAPE:
@@ -558,6 +581,7 @@ uint32_t ble_epd_init(ble_epd_t* p_epd) {
 
     p_epd->config.panel = 0x21;
     epd_settings_read(&p_epd->settings);
+    epd_reminders_read(&m_rem);
     SSD1680_SetXOffset(p_epd->settings.x_offset);
     if (p_epd->config.model_id != SSD1680_213_BWR && p_epd->config.model_id != SSD1680_213_BW)
         p_epd->config.model_id = SSD1680_213_BWR;
@@ -613,8 +637,136 @@ static void epd_marquee_tick(ble_epd_t* p_epd, uint32_t timestamp) {
     }
 }
 
+/* ---------- reminders ---------- */
+
+static void civil_from_days(uint32_t days, uint16_t* y, uint8_t* m, uint8_t* d) {
+    uint32_t z = days + 719468, era = z / 146097, doe = z - era * 146097;
+    uint32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    uint32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
+    *d = doy - (153 * mp + 2) / 5 + 1;
+    *m = mp < 10 ? mp + 3 : mp - 9;
+    *y = yoe + era * 400 + (*m <= 2);
+}
+
+static uint32_t days_from_civil(uint32_t y, uint32_t m, uint32_t d) {
+    y -= m <= 2;
+    uint32_t era = y / 400, yoe = y - era * 400;
+    uint32_t doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+    return era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468;
+}
+
+// Next month on the anchor day (the last day if the month is shorter), same time of day.
+static uint32_t add_month(uint32_t t, uint8_t anchor) {
+    static const uint8_t dim[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    uint16_t y;
+    uint8_t m, d;
+    civil_from_days(t / 86400, &y, &m, &d);
+    if (++m > 12) m = 1, y++;
+    uint8_t len = dim[m - 1] + (m == 2 && y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+    d = anchor && anchor < len ? anchor : len;
+    return days_from_civil(y, m, d) * 86400 + t % 86400;
+}
+
+static uint32_t next_occurrence(const reminder_t* r, uint32_t now) {
+    uint32_t t = r->time;
+    uint8_t type = r->repeat & 7;
+    while (t <= now) t = type == REPEAT_MONTHLY ? add_month(t, r->repeat >> 3) : t + (type == REPEAT_WEEKLY ? 604800 : 86400);
+    return t;
+}
+
+static void epd_alert_end(ble_epd_t* p_epd) {
+    if (!m_alert_active) return;
+    m_alert_active = false;
+    m_led_secs = 0;
+    EPD_LED_Set(false);
+    if (p_epd->config.display_mode == MODE_PICTURE) epd_update_display_mode(p_epd, MODE_CLOCK);
+    epd_gui_update_event_t event = {p_epd, timestamp(), true};
+    epd_gui_update(&event, sizeof(event));
+}
+
+static void epd_alert_dismiss_evt(void* p_event_data, uint16_t event_size) { epd_alert_end(*(ble_epd_t**)p_event_data); }
+
+// Runs on the main loop every 10 s: show the earliest due reminder, reschedule or drop it.
+static void epd_reminder_check(void* p_event_data, uint16_t event_size) {
+    ble_epd_t* p_epd = *(ble_epd_t**)p_event_data;
+    uint32_t now = timestamp();
+    if (m_alert_active) {
+        if (now >= m_alert_until) epd_alert_end(p_epd);
+        return;
+    }
+    if (now < 1704067200) return;  // clock not set yet
+    int8_t due = -1;
+    uint8_t count = 0;
+    CRITICAL_REGION_ENTER();
+    for (uint8_t i = 0; i < REMINDER_MAX; i++) {
+        uint32_t t = m_rem.r[i].time;
+        if (!t || t > now) continue;
+        count++;
+        if (due < 0 || t < m_rem.r[due].time) due = i;
+    }
+    if (due >= 0) {
+        m_alert = m_rem.r[due];
+        m_alert_more = count - 1;
+        if ((m_alert.repeat & 7) == REPEAT_ONCE)
+            memset(&m_rem.r[due], 0, sizeof(reminder_t));
+        else
+            m_rem.r[due].time = next_occurrence(&m_rem.r[due], now);
+    }
+    CRITICAL_REGION_EXIT();
+    if (due < 0) return;
+    epd_reminders_write(&m_rem);
+    m_alert_active = true;
+    m_alert_until = now + ALERT_SHOW_SECS;
+    m_led_secs = ALERT_LED_SECS;
+    epd_gui_update_event_t event = {p_epd, now, true};
+    epd_gui_update(&event, sizeof(event));
+}
+
+static void epd_reminder_command(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length) {
+    if (p_data[0] == EPD_CMD_REMINDER_SET) {
+        if (length < 7 || p_data[1] >= REMINDER_MAX) return;
+        CRITICAL_REGION_ENTER();
+        reminder_t* r = &m_rem.r[p_data[1]];
+        memset(r, 0, sizeof(*r));
+        r->time = p_data[2] | (p_data[3] << 8) | ((uint32_t)p_data[4] << 16) | ((uint32_t)p_data[5] << 24);
+        if (r->time) {
+            uint16_t y;
+            uint8_t m, d;
+            civil_from_days(r->time / 86400, &y, &m, &d);
+            r->repeat = MIN(p_data[6] & 7, REPEAT_MONTHLY) | (d << 3);
+            r->len = MIN(length - 7, REMINDER_TEXT_MAX);
+            memcpy(r->text, &p_data[7], r->len);
+        }
+        CRITICAL_REGION_EXIT();
+        epd_reminders_write(&m_rem);
+        return;
+    }
+    if (length < 2) return;
+    if (p_data[1] == 0x00) {
+        app_sched_event_put(&p_epd, sizeof(p_epd), epd_alert_dismiss_evt);
+    } else if (p_data[1] == 0x01) {
+        memset(&m_rem, 0, sizeof(m_rem));
+        epd_reminders_write(&m_rem);
+    } else if (p_data[1] == 0x02 && length > 2 && p_data[2] < REMINDER_MAX) {
+        // 52 idx t(u32 LE) repeat text...
+        uint8_t buf[7 + REMINDER_TEXT_MAX];
+        const reminder_t* r = &m_rem.r[p_data[2]];
+        buf[0] = 0x52;
+        buf[1] = p_data[2];
+        memcpy(&buf[2], &r->time, 4);
+        buf[6] = r->repeat;
+        memcpy(&buf[7], r->text, r->len);
+        ble_epd_string_send(p_epd, buf, 7 + r->len);
+    }
+}
+
 void ble_epd_on_timer(ble_epd_t* p_epd, uint32_t timestamp, bool force_update) {
     epd_marquee_tick(p_epd, timestamp);
+    if (m_led_secs) {
+        m_led_secs--;
+        EPD_LED_Set(m_led_secs & 1);
+    }
+    if (timestamp % 10 == 0) app_sched_event_put(&p_epd, sizeof(p_epd), epd_reminder_check);
     // Update calendar on 00:00:00, clock on every minute
     if (force_update || (p_epd->config.display_mode == MODE_CALENDAR && timestamp % 86400 == 0) ||
         (p_epd->config.display_mode == MODE_CLOCK && timestamp % 60 == 0)) {
