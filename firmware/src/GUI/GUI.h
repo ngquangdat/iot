@@ -67,6 +67,8 @@ int gui_nav_marquee_width(const nav_data_t* nav);
 void gui_draw_clock(uint32_t local_ts, uint16_t mv, int8_t temp);
 void gui_set_red_pass(bool red);       // false: black/white RAM, true: red RAM
 void gui_set_red_as_black(bool on);    // B/W panels: show red ink as black
+// Reminder band at the bottom of the clock screen (len 0 = none); text must stay valid while drawing.
+void gui_set_clock_banner(uint32_t local_time, const char* text, uint8_t len);
 void gui_draw_date(uint32_t local_ts, uint16_t mv, int8_t temp);
 // Reminder alert (uses red): red title band with the time, text below, "+N" more due.
 void gui_draw_alert(uint32_t local_ts, const char* text, uint8_t len, uint8_t more);

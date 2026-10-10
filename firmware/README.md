@@ -18,7 +18,8 @@ cho nhãn AESL0213C: nRF52811 + SoftDevice S112 7.3.0, màn 2.13" SSD1680 (122×
 - Màn **Lịch**: ngày lớn, thứ, tháng, năm.
 - **Nhắc việc**: tối đa 8 nhắc lưu trong flash (một lần / hằng ngày / hằng tuần / hằng tháng, giữ đúng ngày trong tháng).
   Đến giờ nhãn hiện màn nhắc (dải đỏ + giờ, nội dung, "+N" nếu còn nhắc khác) và nháy LED 20 giây; tắt từ web hoặc tự
-  về đồng hồ sau 60 phút. Đang chỉ đường thì nhắc chờ tới khi kết thúc.
+  về đồng hồ sau 60 phút. Nếu chưa tắt trên web, màn đồng hồ giữ một dải đỏ "giờ · nội dung" ở đáy (thay nhiệt độ/pin,
+  lịch tháng thu gọn lại) đến hết ngày. Đang chỉ đường thì nhắc chờ tới khi kết thúc.
 - Giữ tương thích với web hiện tại: model 2, gói cấu hình báo panel `0x21`, lệnh ghi ảnh `0x30`
   cùng cách đặt cờ (`0x0f` lớp đen, `0xf0` gói tiếp theo), đồng bộ giờ `0x20`, lịch/đồng hồ.
 - Vẫn có **nạp qua Bluetooth không cần nút** (Secure DFU) để cập nhật lần sau.

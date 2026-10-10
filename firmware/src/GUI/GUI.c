@@ -561,9 +561,22 @@ static uint8_t days_in_month(uint16_t y, uint8_t m) {
     return dim[m - 1] + (m == 2 && leap);
 }
 
-static void draw_month(const civil_t* c, uint32_t days) {
+// Unacknowledged reminder shown as a red band along the bottom of the clock screen.
+static const char* m_banner_text;
+static uint8_t m_banner_len;
+static uint32_t m_banner_time;
+
+void gui_set_clock_banner(uint32_t time, const char* text, uint8_t len) {
+    m_banner_time = time;
+    m_banner_text = text;
+    m_banner_len = len;
+}
+
+#define BANNER_TOP 104
+
+static void draw_month(const civil_t* c, uint32_t days, bool compact) {
     char buf[24], *p;
-    const int x0 = 1, w = 122, top = 17, rowh = 15;
+    const int x0 = 1, w = 122, top = 17;
     m_ink = INK_RED;
     fill_rect(0, 0, 124, 15);
     m_ink = INK_WHITE;
@@ -580,13 +593,16 @@ static void draw_month(const civil_t* c, uint32_t days) {
     }
     uint32_t first = days - (c->day - 1);
     int col0 = ((first + 4) % 7 + 6) % 7;  // Monday-first column of the 1st
+    int rows = (col0 + days_in_month(c->year, c->month) + 6) / 7;
+    // With the reminder band at the bottom the rows close up to stay above it.
+    int rowh = !compact ? 15 : rows == 6 ? 12 : 14;
     for (int d = 1; d <= days_in_month(c->year, c->month); d++) {
         int cell = col0 + d - 1, col = cell % 7, row = cell / 7;
         int cx = x0 + (w * (2 * col + 1)) / 14, cy = top + 12 + row * rowh;
         put_uint(buf, d, 1);
         if (d == c->day) {
             m_ink = INK_BLACK;
-            fill_rect(cx - 7, cy - 1, 15, rowh - 2);
+            fill_rect(cx - 7, cy + 1, 15, 11);  // digits occupy rows cy+3..cy+9
             m_ink = INK_WHITE;
             text_top_center(&font_c10b, cx, cy, buf);
         } else {
@@ -602,10 +618,11 @@ void gui_draw_clock(uint32_t ts, uint16_t mv, int8_t temp) {
     civil_t c = to_civil(ts);
     uint32_t days = ts / 86400;
     clear();
-    draw_month(&c, days);
+    bool banner = m_banner_len > 0;
+    draw_month(&c, days, banner);
 
     m_ink = INK_BLACK;
-    fill_rect(125, 3, 1, 116);
+    fill_rect(125, 3, 1, banner ? BANNER_TOP - 6 : 116);
     text_top_center(&font_c11b, 188, 3, weekdays_upper[c.wday]);
     fmt_hm(buf, c.hour, c.min);
     text_top_center(&font_c36, 188, 17, buf);
@@ -631,6 +648,22 @@ void gui_draw_clock(uint32_t ts, uint16_t mv, int8_t temp) {
         p = put_str(p, " ");
         put_str(p, lunar_chi(l.year));
         text_top_center(&font_c11, 188, 78, buf);
+    }
+
+    if (banner) {
+        // "HH:MM · text" in white on a red band across the whole width, one line.
+        static char line[8 + 64];
+        civil_t bt = to_civil(m_banner_time);
+        fmt_hm(line, bt.hour, bt.min);
+        char* q = put_str(line + 5, " · ");
+        uint8_t n = m_banner_len < 58 ? m_banner_len : 58;
+        memcpy(q, m_banner_text, n);
+        m_ink = INK_RED;
+        fill_rect(0, BANNER_TOP, GUI_W, GUI_H - BANNER_TOP);
+        m_ink = INK_WHITE;
+        draw_wrapped(&font_text, 6, BANNER_TOP + 14, 19, GUI_W - 12, 1, line, (q - line) + n);
+        m_ink = INK_BLACK;
+        return;
     }
 
     // Status: temperature, battery icon with percentage.

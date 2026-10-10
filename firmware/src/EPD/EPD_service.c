@@ -66,6 +66,8 @@ static uint8_t m_alert_more;
 static volatile bool m_alert_active;
 static uint32_t m_alert_until;
 static volatile uint8_t m_led_secs;
+static reminder_t m_banner;     // alert that timed out without being dismissed
+static uint32_t m_banner_until;  // shown as a band on the clock screen until the end of that day
 
 static void epd_reminder_command(ble_epd_t* p_epd, uint8_t* p_data, uint16_t length);
 
@@ -76,8 +78,11 @@ static void render(screen_t scr, const nav_data_t* nav, uint32_t ts, uint16_t mv
         gui_draw_date(ts, mv, temp);
     else if (scr == SCR_ALERT)
         gui_draw_alert(m_alert.time, m_alert.text, m_alert.len, m_alert_more);
-    else
+    else {
+        bool banner = m_banner_until && ts < m_banner_until;
+        gui_set_clock_banner(m_banner.time, m_banner.text, banner ? m_banner.len : 0);
         gui_draw_clock(ts, mv, temp);
+    }
 }
 
 // Report each screen update to the phone ("upd=fast 480ms"), which makes refresh issues visible in the web log.
@@ -674,8 +679,18 @@ static uint32_t next_occurrence(const reminder_t* r, uint32_t now) {
     return t;
 }
 
-static void epd_alert_end(ble_epd_t* p_epd) {
-    if (!m_alert_active) return;
+// dismissed: acknowledged from the phone; otherwise the alert timed out and stays as a
+// band on the clock screen until the end of the day.
+static void epd_alert_end(ble_epd_t* p_epd, bool dismissed) {
+    if (!m_alert_active) {
+        if (!dismissed || !m_banner_until) return;
+        m_banner_until = 0;  // dismiss also clears the band
+    } else if (dismissed) {
+        m_banner_until = 0;
+    } else {
+        m_banner = m_alert;
+        m_banner_until = (timestamp() / 86400 + 1) * 86400;
+    }
     m_alert_active = false;
     m_led_secs = 0;
     EPD_LED_Set(false);
@@ -684,14 +699,14 @@ static void epd_alert_end(ble_epd_t* p_epd) {
     epd_gui_update(&event, sizeof(event));
 }
 
-static void epd_alert_dismiss_evt(void* p_event_data, uint16_t event_size) { epd_alert_end(*(ble_epd_t**)p_event_data); }
+static void epd_alert_dismiss_evt(void* p_event_data, uint16_t event_size) { epd_alert_end(*(ble_epd_t**)p_event_data, true); }
 
 // Runs on the main loop every 10 s: show the earliest due reminder, reschedule or drop it.
 static void epd_reminder_check(void* p_event_data, uint16_t event_size) {
     ble_epd_t* p_epd = *(ble_epd_t**)p_event_data;
     uint32_t now = timestamp();
     if (m_alert_active) {
-        if (now >= m_alert_until) epd_alert_end(p_epd);
+        if (now >= m_alert_until) epd_alert_end(p_epd, false);
         return;
     }
     if (now < 1704067200) return;  // clock not set yet

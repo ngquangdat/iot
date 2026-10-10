@@ -98,6 +98,12 @@ int main(void) {
     dump_color("build/clock_d.ppm", gui_draw_clock, 1788152400 + 7 * 3600, 2400, 33);
     gui_draw_clock(1790000000 + 7 * 3600, 2950, 27);
     dump("build/clock.pbm");
+    const char* rem = "Họp giao ban với phòng Phân tích, mang báo cáo quý III";
+    gui_set_clock_banner(1791640800 + 7 * 3600 - 3600, rem, strlen(rem));
+    dump_color("build/banner_a.ppm", gui_draw_clock, 1791641580 + 7 * 3600, 2950, 27);   // Oct 2026: 5 rows
+    gui_set_clock_banner(1788152400 + 7 * 3600 - 7200, "Uống thuốc", strlen("Uống thuốc"));
+    dump_color("build/banner_b.ppm", gui_draw_clock, 1788152400 + 7 * 3600, 2400, 33);   // Aug 2026: 6 rows
+    gui_set_clock_banner(0, "", 0);
     dump_color("build/alert_a.ppm", alert_a, 1791641580 + 7 * 3600, 0, 0);
     dump_color("build/alert_b.ppm", alert_b, 1791641580 + 7 * 3600, 0, 0);
     gui_draw_date(1790000000 + 7 * 3600, 2950, 27);
